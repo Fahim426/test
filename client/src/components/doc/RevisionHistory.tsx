@@ -1,0 +1,9 @@
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { fmt } from '@/lib/format';
+export function RevisionHistory({ entity, id }: { entity: string; id?: number|string }) {
+ const q=useQuery({queryKey:['revision-history',entity,id],enabled:!!id,refetchInterval:15000,queryFn:async()=>(await api.get<{rows:{id:number;createdAt:string;employee:string;username:string;details:{reason?:string;changes?:{field:string;before:unknown;after:unknown}[]}}[]}>('/revision-history/'+entity+'/'+id)).data});
+ const value=(v:unknown)=>v===null||v===undefined?'(empty)':typeof v==='object'?JSON.stringify(v):String(v);
+ if(!id)return null;
+ return <section className="mt-4 rounded border border-gray-200 bg-white p-3 text-slate-800"><h3 className="mb-2 text-sm font-semibold">Edit History</h3><p className="mb-2 text-xs text-slate-500">Field history is recorded from this upgrade onward.</p>{q.isError?<button type="button" onClick={()=>void q.refetch()}>Retry history</button>:q.isLoading?<p>Loading...</p>:!q.data?.rows.length?<p className="text-xs text-slate-500">No field edits recorded yet.</p>:q.data.rows.map(row=><div key={row.id} className="mb-3"><p className="mb-1 text-xs"><strong>{row.employee}</strong> (@{row.username}) edited on {fmt.dateTime(row.createdAt)}{row.details.reason?' - '+row.details.reason:''}</p><div className="overflow-auto"><table className="w-full border-collapse text-xs"><thead><tr className="bg-slate-50 text-left"><th className="border p-2">Field</th><th className="border p-2">Previous value</th><th className="border p-2">New value</th></tr></thead><tbody>{row.details.changes?.map((c,i)=><tr key={i}><td className="border p-2">{c.field}</td><td className="max-w-sm whitespace-pre-wrap break-words border p-2">{value(c.before)}</td><td className="max-w-sm whitespace-pre-wrap break-words border p-2">{value(c.after)}</td></tr>)}</tbody></table></div></div>)}</section>;
+}

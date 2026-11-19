@@ -1,0 +1,202 @@
+[
+  {
+    "intent": "sales_summary",
+    "message": "Can I get the sales value for yesterday?"
+  },
+  {
+    "intent": "sales_summary",
+    "message": "sals total for the previous quarter please"
+  },
+  {
+    "intent": "sales_invoices",
+    "message": "I need the paid customer invoice list"
+  },
+  {
+    "intent": "sales_invoices",
+    "message": "list our sales invoies from last week"
+  },
+  {
+    "intent": "sales_orders",
+    "message": "show me customer orders that are approved"
+  },
+  {
+    "intent": "sales_orders",
+    "message": "sales order register for October 2026"
+  },
+  {
+    "intent": "quotations",
+    "message": "any sales quotations in draft status"
+  },
+  {
+    "intent": "quotations",
+    "message": "let me see the sent customer quotes"
+  },
+  {
+    "intent": "pending_deliveries",
+    "message": "what is in our delivery backlog right now"
+  },
+  {
+    "intent": "pending_deliveries",
+    "message": "show customer deliveries still pending"
+  },
+  {
+    "intent": "purchase_summary",
+    "message": "purchaes total for the previous month"
+  },
+  {
+    "intent": "purchase_summary",
+    "message": "what was our procurement value yesterday"
+  },
+  {
+    "intent": "purchase_invoices",
+    "message": "show paid vendor invoice records"
+  },
+  {
+    "intent": "purchase_invoices",
+    "message": "can I see the supplier bill register"
+  },
+  {
+    "intent": "purchase_orders",
+    "message": "open procurement order list please"
+  },
+  {
+    "intent": "purchase_orders",
+    "message": "approved supplier orders from this quarter"
+  },
+  {
+    "intent": "goods_receipts",
+    "message": "can I see stock receipt notes"
+  },
+  {
+    "intent": "goods_receipts",
+    "message": "grn list for October 2026"
+  },
+  {
+    "intent": "stock_summary",
+    "message": "what is the available inventory for GX-CG60"
+  },
+  {
+    "intent": "stock_summary",
+    "message": "please show stock onhand at Dubai"
+  },
+  {
+    "intent": "low_stock",
+    "message": "products with inventory below the minimum"
+  },
+  {
+    "intent": "low_stock",
+    "message": "show the reorder shortage report"
+  },
+  {
+    "intent": "product_lookup",
+    "message": "GX-15300 selling price and brand"
+  },
+  {
+    "intent": "product_lookup",
+    "message": "product cost for GX-CG60"
+  },
+  {
+    "intent": "top_products",
+    "message": "rank five machine models by their sales"
+  },
+  {
+    "intent": "top_products",
+    "message": "which products were the best sellers last quarter"
+  },
+  {
+    "intent": "top_customers",
+    "message": "show our top three buyers by turnover"
+  },
+  {
+    "intent": "top_customers",
+    "message": "who were the highest spending clients in October"
+  },
+  {
+    "intent": "customer_dues",
+    "message": "how much money do customers still owe us"
+  },
+  {
+    "intent": "customer_dues",
+    "message": "client receivables over twenty thousand"
+  },
+  {
+    "intent": "supplier_dues",
+    "message": "what are our unpaid supplier balances"
+  },
+  {
+    "intent": "supplier_dues",
+    "message": "vendor arrears above 25k please"
+  },
+  {
+    "intent": "branch_performance",
+    "message": "which branches had the highest sales this year"
+  },
+  {
+    "intent": "branch_performance",
+    "message": "compare revenue across our branch offices"
+  },
+  {
+    "intent": "gross_profit",
+    "message": "gross profit percentage for this quarter"
+  },
+  {
+    "intent": "gross_profit",
+    "message": "can I see the sales gross margin report"
+  },
+  {
+    "intent": "machine_trace",
+    "message": "track serial DEMO-F7-SERIAL-1 for me"
+  },
+  {
+    "intent": "machine_trace",
+    "message": "show warranty details for machine serial DEMO-F7-SERIAL-1"
+  },
+  {
+    "intent": "amc_contracts",
+    "message": "show me the active maintenance contract register"
+  },
+  {
+    "intent": "amc_contracts",
+    "message": "list customer amc agreements"
+  },
+  {
+    "intent": "amc_expiring",
+    "message": "which maintenance agreements expire next month"
+  },
+  {
+    "intent": "amc_expiring",
+    "message": "show the upcoming amc renewal list"
+  },
+  {
+    "intent": "service_due",
+    "message": "which technician visits are scheduled this week"
+  },
+  {
+    "intent": "service_due",
+    "message": "show the overdue service checks"
+  },
+  {
+    "intent": "employees",
+    "message": "what is the active staff headcount"
+  },
+  {
+    "intent": "employees",
+    "message": "list the employee directory by branch"
+  },
+  {
+    "intent": "employee_lookup",
+    "message": "show the staff profile of Ahmed Khan"
+  },
+  {
+    "intent": "employee_lookup",
+    "message": "employee phone details for EMP-0001"
+  },
+  {
+    "intent": "audit_history",
+    "message": "show price revision history for GX-15300"
+  },
+  {
+    "intent": "audit_history",
+    "message": "which employee changed SI-2026-00005"
+  }
+]

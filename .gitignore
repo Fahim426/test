@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+*.log
+server/backups/
+server/uploads/
+.DS_Store
+.shots/
+client-modern/screenshots/
+
+local-runtime/
+.local-mysql/
+.local-run/
+server/.env

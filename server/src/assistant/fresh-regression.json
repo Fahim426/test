@@ -1,0 +1,202 @@
+[
+  {
+    "intent": "sales_summary",
+    "message": "sales figures pls for this week"
+  },
+  {
+    "intent": "sales_summary",
+    "message": "our turnover this November"
+  },
+  {
+    "intent": "sales_invoices",
+    "message": "lemme see the sales inv list"
+  },
+  {
+    "intent": "sales_invoices",
+    "message": "custmer invoices above 50k"
+  },
+  {
+    "intent": "sales_orders",
+    "message": "any draft customer orders around"
+  },
+  {
+    "intent": "sales_orders",
+    "message": "sales order paperwork from last week"
+  },
+  {
+    "intent": "quotations",
+    "message": "quotes we have sent out"
+  },
+  {
+    "intent": "quotations",
+    "message": "customer estimates awaiting an answer"
+  },
+  {
+    "intent": "pending_deliveries",
+    "message": "deliveries we have not shipped yet"
+  },
+  {
+    "intent": "pending_deliveries",
+    "message": "anything waiting to be delivered"
+  },
+  {
+    "intent": "purchase_summary",
+    "message": "total procuremnt spend this month"
+  },
+  {
+    "intent": "purchase_summary",
+    "message": "what did we buy this week"
+  },
+  {
+    "intent": "purchase_invoices",
+    "message": "vendor bills from November"
+  },
+  {
+    "intent": "purchase_invoices",
+    "message": "our purchse invoice records"
+  },
+  {
+    "intent": "purchase_orders",
+    "message": "supplier order paperwork please"
+  },
+  {
+    "intent": "purchase_orders",
+    "message": "pending procurement orders"
+  },
+  {
+    "intent": "goods_receipts",
+    "message": "goods receipt paperwork for this week"
+  },
+  {
+    "intent": "goods_receipts",
+    "message": "list the grn records"
+  },
+  {
+    "intent": "stock_summary",
+    "message": "how many GX-15300 left on the shelf"
+  },
+  {
+    "intent": "stock_summary",
+    "message": "available stok at Sharjah"
+  },
+  {
+    "intent": "low_stock",
+    "message": "which stock is getting scarce"
+  },
+  {
+    "intent": "low_stock",
+    "message": "items near reorder level"
+  },
+  {
+    "intent": "product_lookup",
+    "message": "retail price on GX-CG60 please"
+  },
+  {
+    "intent": "product_lookup",
+    "message": "details about model GX-15300"
+  },
+  {
+    "intent": "top_products",
+    "message": "hot selling models this month"
+  },
+  {
+    "intent": "top_products",
+    "message": "top three machines by turnover"
+  },
+  {
+    "intent": "top_customers",
+    "message": "which buyers bring the biggest sales"
+  },
+  {
+    "intent": "top_customers",
+    "message": "our highest spending customers please"
+  },
+  {
+    "intent": "customer_dues",
+    "message": "money still owed by clients"
+  },
+  {
+    "intent": "customer_dues",
+    "message": "customer due amounts over 100k"
+  },
+  {
+    "intent": "supplier_dues",
+    "message": "how much is due to each vendor"
+  },
+  {
+    "intent": "supplier_dues",
+    "message": "supplier balances that remain unpaid"
+  },
+  {
+    "intent": "branch_performance",
+    "message": "rank offices by revenue"
+  },
+  {
+    "intent": "branch_performance",
+    "message": "compare the branches sales figures"
+  },
+  {
+    "intent": "gross_profit",
+    "message": "gross earnings on our sales"
+  },
+  {
+    "intent": "gross_profit",
+    "message": "sales less COGS please"
+  },
+  {
+    "intent": "machine_trace",
+    "message": "owner of serial DEMO-F7-SERIAL-1"
+  },
+  {
+    "intent": "machine_trace",
+    "message": "where did serial DEMO-F7-SERIAL-1 end up"
+  },
+  {
+    "intent": "amc_contracts",
+    "message": "maintenance agreements we have"
+  },
+  {
+    "intent": "amc_contracts",
+    "message": "customer amc coverage list"
+  },
+  {
+    "intent": "amc_expiring",
+    "message": "amcs coming to an end"
+  },
+  {
+    "intent": "amc_expiring",
+    "message": "maintenance contracts needing renewal"
+  },
+  {
+    "intent": "service_due",
+    "message": "who is scheduled for a service check"
+  },
+  {
+    "intent": "service_due",
+    "message": "any overdue maintenance visits"
+  },
+  {
+    "intent": "employees",
+    "message": "give me the headcount of our crew"
+  },
+  {
+    "intent": "employees",
+    "message": "a directory of active employees"
+  },
+  {
+    "intent": "employee_lookup",
+    "message": "department for Ahmed Khan"
+  },
+  {
+    "intent": "employee_lookup",
+    "message": "contact details of EMP-0001"
+  },
+  {
+    "intent": "audit_history",
+    "message": "price change log for GX-15300"
+  },
+  {
+    "intent": "audit_history",
+    "message": "who last modified SI-2026-00005"
+  }
+]

@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply bg-app-bg text-[13px] text-slate-800 font-sans antialiased; margin: 0; }
+  * { scrollbar-width: thin; scrollbar-color: #b8c0cc transparent; }
+  *::-webkit-scrollbar { width: 9px; height: 9px; }
+  *::-webkit-scrollbar-thumb { background: #b8c0cc; border-radius: 0; }
+  *::-webkit-scrollbar-track { background: #eef0f3; }
+  button { font-family: inherit; }
+}
+
+@layer components {
+  .ctl { @apply h-7 w-full rounded border border-app-border bg-white px-2 text-[12px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand focus:ring-1 focus:ring-brand/40 disabled:bg-slate-100 disabled:text-slate-500; }
+  .grid-th { @apply sticky top-0 z-10 border-b border-r border-app-border bg-app-head px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600; }
+  .grid-td { @apply border-b border-r border-slate-200 px-2 text-[12px]; }
+}
+
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+  .no-print { display: none !important; }
+}
+
+@layer components {
+  .tb-btn { @apply inline-flex h-7 items-center gap-1 rounded border border-app-border bg-white px-2 text-[12px] text-slate-700 hover:bg-slate-100; }
+  .pg-btn { @apply inline-flex h-6 w-6 items-center justify-center rounded border border-app-border bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40; }
+}

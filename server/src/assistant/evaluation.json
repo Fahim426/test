@@ -1,0 +1,47 @@
+{
+  "frozenBeforeFreshAt": "2026-11-19T09:59:19.987Z",
+  "hashes": {
+    "nlp.ts": "df21a4b331c89259846699a308235cb26f4219f0fddf7e0ea91840436a0e494f",
+    "entities.ts": "0e76c86bf759d5e6fa078aedf863f6d0cbfe41668c6b9af847e256939b382edd",
+    "understand.ts": "c509fc047455443779df4a348e437bf9ca4b069bb32f67fe10e4fc5d5a98ce3b",
+    "intents.ts": "47b29242256d74d7dc1755b91a63b22dfd6d68489f911142e37c1edcdb4507fa"
+  },
+  "freshCount": 50,
+  "notes": "Fresh phrases authored independently after the initial language layer passed. Baseline is recorded before vocabulary fixes; these become regression cases, not an untouched held-out set.",
+  "freshBaseline": {
+    "passed": 35,
+    "total": 50,
+    "percent": 70
+  },
+  "freshAfterVocabularyFixes": {
+    "passed": 50,
+    "total": 50
+  },
+  "heldOutFrozenAt": "2026-11-19T10:27:27.789Z",
+  "heldOutCount": 50,
+  "finalLanguageHashes": {
+    "nlp.ts": "1f5fc64774f06dabc76698775bf3ecad5412d1a9dd3819ad0ee45eaad5bd1147",
+    "entities.ts": "99fb34e10f0259a779ba8575cb8691871070b5a9b3cbc67103370a0350a92672",
+    "understand.ts": "038d83c6680281248af4874fa4150547273b0e32fcd234c9b5a710b3ae59a092",
+    "intents.ts": "70d87d150999bfdbc10e11e8d92c424118ab280be2ea5799f40d994977f1b369"
+  },
+  "firstUntouchedPositive": {
+    "passed": 49,
+    "total": 50,
+    "percent": 98
+  },
+  "firstUntouchedNegative": {
+    "passed": 8,
+    "total": 10,
+    "percent": 80
+  },
+  "postHoldoutChanges": "Safety-only refusal rules were added for imperative creation verbs and predictions after two negative cases failed. The one positive held-out miss was not tuned. Initial positive score is preserved separately from regression results.",
+  "latestLanguageHashes": {
+    "nlp.ts": "0843d3195bfe0f4db84133e5c27c603fb8b6de60f79f623270067706dc18b800",
+    "entities.ts": "e58aeb96c8ac084561d433349679cc53c7293683465d6c039735cea3b67ab551",
+    "understand.ts": "b0e6531f56f21a7745bd1a9ee67938ad58d711e315d824c3cf396deb1c26239b",
+    "intents.ts": "f484ee76275a1170b6f764b712025f0fa29d92c577a0feb1c23b19934ca53951"
+  },
+  "latestVerificationAt": "2026-11-19T10:52:19.404Z",
+  "laterChanges": "Added typo/action refusals, inclusive amount bounds and explicit numeric document disambiguation with follow-up precedence regression. No tuning of the positive held-out miss. Original scores and hashes are preserved."
+}

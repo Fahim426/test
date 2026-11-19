@@ -1,0 +1,138 @@
+{
+  "tuned": {
+    "passed": 200,
+    "total": 200,
+    "failures": []
+  },
+  "negative": {
+    "passed": 20,
+    "total": 20,
+    "failures": []
+  },
+  "entities": {
+    "passed": 24,
+    "total": 24,
+    "failures": []
+  },
+  "followups": {
+    "passed": 4,
+    "total": 4,
+    "failures": []
+  },
+  "clarifications": {
+    "passed": 4,
+    "total": 4,
+    "failures": []
+  },
+  "fresh-regression": {
+    "passed": 35,
+    "total": 50,
+    "failures": [
+      {
+        "case": {
+          "intent": "sales_summary",
+          "message": "our turnover this November"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'sales_summary'\n"
+      },
+      {
+        "case": {
+          "intent": "pending_deliveries",
+          "message": "deliveries we have not shipped yet"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'pending_deliveries'\n"
+      },
+      {
+        "case": {
+          "intent": "stock_summary",
+          "message": "how many GX-15300 left on the shelf"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'stock_summary'\n"
+      },
+      {
+        "case": {
+          "intent": "stock_summary",
+          "message": "available stok at Sharjah"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'stock_summary'\n"
+      },
+      {
+        "case": {
+          "intent": "low_stock",
+          "message": "which stock is getting scarce"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'low_stock'\n"
+      },
+      {
+        "case": {
+          "intent": "top_products",
+          "message": "hot selling models this month"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'sales_summary'\n- 'top_products'\n"
+      },
+      {
+        "case": {
+          "intent": "branch_performance",
+          "message": "rank offices by revenue"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'branch_performance'\n"
+      },
+      {
+        "case": {
+          "intent": "gross_profit",
+          "message": "gross earnings on our sales"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'gross_profit'\n"
+      },
+      {
+        "case": {
+          "intent": "gross_profit",
+          "message": "sales less COGS please"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'gross_profit'\n"
+      },
+      {
+        "case": {
+          "intent": "amc_contracts",
+          "message": "maintenance agreements we have"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'amc_contracts'\n"
+      },
+      {
+        "case": {
+          "intent": "employees",
+          "message": "give me the headcount of our crew"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'employees'\n"
+      },
+      {
+        "case": {
+          "intent": "employee_lookup",
+          "message": "department for Ahmed Khan"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'employee_lookup'\n"
+      },
+      {
+        "case": {
+          "intent": "employee_lookup",
+          "message": "contact details of EMP-0001"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'employee_lookup'\n"
+      },
+      {
+        "case": {
+          "intent": "audit_history",
+          "message": "price change log for GX-15300"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'audit_history'\n"
+      },
+      {
+        "case": {
+          "intent": "audit_history",
+          "message": "who last modified SI-2026-00005"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'audit_history'\n"
+      }
+    ]
+  }
+}

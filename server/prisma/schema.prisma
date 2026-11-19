@@ -1,0 +1,1629 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ADMIN / SECURITY
+// ============================================================
+model User {
+  id           Int            @id @default(autoincrement())
+  username     String         @unique
+  email        String?
+  fullName     String
+  passwordHash String
+  roleId       Int
+  role         Role           @relation(fields: [roleId], references: [id])
+  branchId     Int?
+  isActive     Boolean        @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  description String?
+  isSystem    Boolean          @default(false)
+  users       User[]
+  permissions RolePermission[]
+}
+
+// module = e.g. "purchase_order", "sales_invoice", "products"; action = view|create|edit|delete|approve|reject|post|cancel|print|export
+model RolePermission {
+  id     Int    @id @default(autoincrement())
+  roleId Int
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  module String
+  action String
+
+  @@unique([roleId, module, action])
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  username  String?
+  action    String
+  entity    String
+  entityId  String?
+  details   String?  @db.LongText
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  key   String @id
+  value String @db.Text
+}
+
+model DocumentNumbering {
+  id          Int      @id @default(autoincrement())
+  docType     String   @unique
+  prefix      String
+  includeYear Boolean  @default(true)
+  includeBranch Boolean @default(false)
+  padding     Int      @default(5)
+  separator   String   @default("-")
+  resetRule   String   @default("YEARLY") // YEARLY | MONTHLY | NEVER
+  currentSeq  Int      @default(0)
+  periodKey   String   @default("")
+}
+
+model ApprovalRule {
+  id        Int      @id @default(autoincrement())
+  docType   String
+  name      String
+  minAmount Decimal  @default(0) @db.Decimal(18, 2)
+  maxAmount Decimal? @db.Decimal(18, 2)
+  steps     String   @db.Text // JSON array of role names, e.g. ["Manager","Finance"]
+  isActive  Boolean  @default(true)
+
+  @@index([docType])
+}
+
+model ApprovalRequest {
+  id          Int              @id @default(autoincrement())
+  docType     String
+  docId       Int
+  docNo       String
+  amount      Decimal          @default(0) @db.Decimal(18, 2)
+  steps       String           @db.Text // JSON array of role names
+  currentStep Int              @default(0)
+  status      String           @default("PENDING") // PENDING | APPROVED | REJECTED
+  requestedBy Int?
+  createdAt   DateTime         @default(now())
+  actions     ApprovalAction[]
+
+  @@index([docType, docId])
+  @@index([status])
+}
+
+model ApprovalAction {
+  id         Int             @id @default(autoincrement())
+  requestId  Int
+  request    ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  step       Int
+  roleName   String
+  userId     Int?
+  username   String?
+  action     String // APPROVED | REJECTED
+  comment    String?
+  createdAt  DateTime        @default(now())
+}
+
+model Attachment {
+  id        Int      @id @default(autoincrement())
+  docType   String
+  docId     Int
+  fileName  String
+  filePath  String
+  mimeType  String?
+  size      Int      @default(0)
+  uploadedBy Int?
+  createdAt DateTime @default(now())
+
+  @@index([docType, docId])
+}
+
+model Favorite {
+  id     Int    @id @default(autoincrement())
+  userId Int
+  label  String
+  route  String
+
+  @@unique([userId, route])
+}
+
+// Visual document flow: fromType/fromId -> toType/toId
+model DocumentLink {
+  id        Int      @id @default(autoincrement())
+  fromType  String
+  fromId    Int
+  fromNo    String
+  toType    String
+  toId      Int
+  toNo      String
+  createdAt DateTime @default(now())
+
+  @@index([fromType, fromId])
+  @@index([toType, toId])
+}
+
+// ============================================================
+// DIMENSIONS / MASTER DATA
+// ============================================================
+model Company {
+  id        Int    @id @default(autoincrement())
+  code      String @unique
+  name      String
+  arabicName String?
+  trn       String?
+  address   String?
+  phone     String?
+  email     String?
+  country   String?
+  baseCurrency String @default("AED")
+  isActive  Boolean @default(true)
+}
+
+model BusinessUnit {
+  id        Int     @id @default(autoincrement())
+  code      String  @unique
+  name      String
+  isActive  Boolean @default(true)
+}
+
+model Branch {
+  id        Int     @id @default(autoincrement())
+  code      String  @unique
+  name      String
+  address   String?
+  isActive  Boolean @default(true)
+  warehouses Warehouse[]
+}
+
+model Warehouse {
+  id        Int     @id @default(autoincrement())
+  code      String  @unique
+  name      String
+  branchId  Int?
+  branch    Branch? @relation(fields: [branchId], references: [id])
+  address   String?
+  isActive  Boolean @default(true)
+  locations WarehouseLocation[]
+}
+
+// Warehouse -> Zone -> Rack -> Shelf -> Bin
+model WarehouseLocation {
+  id          Int       @id @default(autoincrement())
+  warehouseId Int
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  zone        String?
+  rack        String?
+  shelf       String?
+  bin         String?
+  code        String
+  isActive    Boolean   @default(true)
+
+  @@unique([warehouseId, code])
+}
+
+model Category {
+  id        Int        @id @default(autoincrement())
+  code      String     @unique
+  name      String
+  parentId  Int?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  isActive  Boolean    @default(true)
+  products  Product[]  @relation("ProductCategory")
+}
+
+model ProductGroup {
+  id       Int       @id @default(autoincrement())
+  code     String    @unique
+  name     String
+  isActive Boolean   @default(true)
+  products Product[]
+}
+
+model ProductType {
+  id       Int       @id @default(autoincrement())
+  code     String    @unique
+  name     String
+  isActive Boolean   @default(true)
+  products Product[]
+}
+
+model Brand {
+  id       Int       @id @default(autoincrement())
+  code     String    @unique
+  name     String
+  country  String?
+  isActive Boolean   @default(true)
+  products Product[]
+}
+
+model Area {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true)
+}
+
+model Territory {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true)
+}
+
+model Salesman {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique
+  name     String
+  phone    String?
+  email    String?
+  commissionPct Decimal @default(0) @db.Decimal(6, 2)
+  isActive Boolean @default(true)
+}
+
+model Unit {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique
+  name     String
+  isActive Boolean @default(true)
+}
+
+model PaymentTerm {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique
+  name     String
+  days     Int     @default(0)
+  isActive Boolean @default(true)
+}
+
+model Currency {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique
+  name     String
+  symbol   String?
+  rate     Decimal @default(1) @db.Decimal(18, 6) // rate to base currency
+  isBase   Boolean @default(false)
+  isActive Boolean @default(true)
+}
+
+// Configurable VAT. category: TAXABLE | ZERO_RATED | EXEMPT | OUT_OF_SCOPE
+model VatCode {
+  id        Int     @id @default(autoincrement())
+  code      String  @unique
+  name      String
+  rate      Decimal @default(0) @db.Decimal(6, 2)
+  category  String  @default("TAXABLE")
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+}
+
+model Customer {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  name          String
+  arabicName    String?
+  trn           String?
+  contactPerson String?
+  phone         String?
+  mobile        String?
+  email         String?
+  address       String?
+  city          String?
+  country       String?
+  paymentTermId Int?
+  creditLimit   Decimal  @default(0) @db.Decimal(18, 2)
+  currencyCode  String   @default("AED")
+  salesmanId    Int?
+  territoryId   Int?
+  areaId        Int?
+  vatCategory   String   @default("TAXABLE")
+  openingBalance Decimal @default(0) @db.Decimal(18, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  amcContracts  AmcContract[]
+}
+
+model Supplier {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  name          String
+  country       String?
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  currencyCode  String   @default("AED")
+  paymentTermId Int?
+  vatCategory   String   @default("TAXABLE")
+  trn           String?
+  creditLimit   Decimal  @default(0) @db.Decimal(18, 2)
+  openingBalance Decimal @default(0) @db.Decimal(18, 2)
+  bankDetails   String?  @db.Text
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+// ============================================================
+// PRODUCTS
+// ============================================================
+model Product {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique
+  name           String
+  arabicName     String?
+  description    String?   @db.Text
+  oemNumber      String?
+  barcode        String?
+  brandId        Int?
+  brand          Brand?    @relation(fields: [brandId], references: [id])
+  categoryId     Int?
+  category       Category? @relation("ProductCategory", fields: [categoryId], references: [id])
+  subCategoryId  Int?
+  productGroupId Int?
+  productGroup   ProductGroup? @relation(fields: [productGroupId], references: [id])
+  productTypeId  Int?
+  productType    ProductType?  @relation(fields: [productTypeId], references: [id])
+  vehicleMake    String?
+  vehicleModel   String?
+  vehicleVariant String?
+  yearInfo       String?
+  engine         String?
+  fuelType       String?
+  purchaseUnit   String    @default("PCS")
+  salesUnit      String    @default("PCS")
+  costPrice      Decimal   @default(0) @db.Decimal(18, 4)
+  averageCost    Decimal   @default(0) @db.Decimal(18, 4)
+  lastPurchasePrice Decimal @default(0) @db.Decimal(18, 4)
+  retailPrice    Decimal   @default(0) @db.Decimal(18, 2)
+  wholesalePrice Decimal   @default(0) @db.Decimal(18, 2)
+  minStock       Decimal   @default(0) @db.Decimal(18, 3)
+  maxStock       Decimal   @default(0) @db.Decimal(18, 3)
+  reorderLevel   Decimal   @default(0) @db.Decimal(18, 3)
+  weight         Decimal   @default(0) @db.Decimal(12, 3)
+  length         Decimal   @default(0) @db.Decimal(12, 3)
+  width          Decimal   @default(0) @db.Decimal(12, 3)
+  height         Decimal   @default(0) @db.Decimal(12, 3)
+  countryOfOrigin String?
+  warranty       String?
+  vatRate        Decimal   @default(5) @db.Decimal(6, 2)
+  primarySupplierId Int?
+  defaultWarehouseId Int?
+  rack           String?
+  shelf          String?
+  bin            String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  partNumbers    ProductPartNumber[]
+  vehicles       ProductVehicle[]
+  balances       StockBalance[]
+  amcContracts   AmcContract[]
+
+  @@index([oemNumber])
+  @@index([barcode])
+  @@index([name])
+}
+
+// All searchable numbers (OEM + alternates). kind: OEM | ALTERNATE
+model ProductPartNumber {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  number    String
+  kind      String  @default("ALTERNATE")
+
+  @@index([number])
+  @@index([productId])
+}
+
+model ProductVehicle {
+  id           Int     @id @default(autoincrement())
+  productId    Int
+  product      Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  make         String
+  model        String
+  variant      String?
+  yearFrom     Int?
+  yearTo       Int?
+  engine       String?
+  fuel         String?
+  transmission String?
+
+  @@index([productId])
+  @@index([make, model])
+}
+
+// ============================================================
+// INVENTORY (transaction based)
+// ============================================================
+// StockTransaction is the source of truth; StockBalance is a cache maintained ONLY by stockService.
+model StockTransaction {
+  id          Int       @id @default(autoincrement())
+  txDate      DateTime  @default(now())
+  txType      String    // OPENING | PURCHASE_RECEIPT | SALES_DELIVERY | SALES_RETURN | PURCHASE_RETURN | TRANSFER_OUT | TRANSFER_IN | ADJUSTMENT | COUNT | DAMAGE | SCRAP | WAREHOUSE_RECEIPT | LANDED_COST_ADJ
+  productId   Int
+  warehouseId Int
+  locationId  Int?
+  qty         Decimal   @db.Decimal(18, 3) // signed
+  unitCost    Decimal   @default(0) @db.Decimal(18, 4)
+  value       Decimal   @default(0) @db.Decimal(18, 2) // signed qty*unitCost
+  refType     String?
+  refId       Int?
+  refNo       String?
+  remarks     String?
+  createdBy   Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([productId, warehouseId])
+  @@index([refType, refId])
+  @@index([txDate])
+}
+
+model StockBalance {
+  id          Int       @id @default(autoincrement())
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id])
+  warehouseId Int
+  onHand      Decimal   @default(0) @db.Decimal(18, 3)
+  reserved    Decimal   @default(0) @db.Decimal(18, 3)
+  avgCost     Decimal   @default(0) @db.Decimal(18, 4)
+
+  @@unique([productId, warehouseId])
+}
+
+model StockReservation {
+  id           Int      @id @default(autoincrement())
+  salesOrderId Int
+  salesOrderNo String
+  customerId   Int
+  productId    Int
+  warehouseId  Int
+  qty          Decimal  @db.Decimal(18, 3)
+  fulfilledQty Decimal  @default(0) @db.Decimal(18, 3)
+  status       String   @default("ACTIVE") // ACTIVE | FULFILLED | RELEASED
+  createdAt    DateTime @default(now())
+
+  @@index([salesOrderId])
+  @@index([productId, warehouseId])
+}
+
+model StockTransfer {
+  id              Int      @id @default(autoincrement())
+  transferNo      String   @unique
+  txDate          DateTime
+  fromWarehouseId Int
+  toWarehouseId   Int
+  status          String   @default("REQUESTED") // REQUESTED | APPROVED | DISPATCHED | IN_TRANSIT | RECEIVING | COMPLETED | REJECTED | CANCELLED
+  remarks         String?
+  createdBy       Int?
+  createdAt       DateTime @default(now())
+  items           StockTransferItem[]
+}
+
+model StockTransferItem {
+  id          Int           @id @default(autoincrement())
+  transferId  Int
+  transfer    StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId   Int
+  qty         Decimal       @db.Decimal(18, 3)
+  receivedQty Decimal       @default(0) @db.Decimal(18, 3)
+}
+
+// Adjustment / Count / Damage / Scrap / Opening / Warehouse receipt
+model StockAdjustment {
+  id          Int      @id @default(autoincrement())
+  adjNo       String   @unique
+  adjType     String   // OPENING | ADJUSTMENT | COUNT | DAMAGE | SCRAP | WAREHOUSE_RECEIPT
+  txDate      DateTime
+  warehouseId Int
+  status      String   @default("DRAFT") // DRAFT | POSTED | CANCELLED
+  reason      String?
+  remarks     String?
+  createdBy   Int?
+  createdAt   DateTime @default(now())
+  items       StockAdjustmentItem[]
+}
+
+model StockAdjustmentItem {
+  id           Int             @id @default(autoincrement())
+  adjustmentId Int
+  adjustment   StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  productId    Int
+  systemQty    Decimal         @default(0) @db.Decimal(18, 3) // for COUNT
+  countedQty   Decimal         @default(0) @db.Decimal(18, 3) // for COUNT; for others use qtyChange
+  qtyChange    Decimal         @default(0) @db.Decimal(18, 3) // signed
+  unitCost     Decimal         @default(0) @db.Decimal(18, 4)
+}
+
+// ============================================================
+// PURCHASE
+// ============================================================
+model MaterialRequest {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  requestedBy  String?
+  department   String?
+  businessUnitId Int?
+  warehouseId  Int?
+  requiredDate DateTime?
+  priority     String   @default("MEDIUM")
+  status       String   @default("DRAFT") // Draft Submitted Approved Rejected Closed Cancelled (upper-case)
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        MaterialRequestItem[]
+}
+
+model MaterialRequestItem {
+  id          Int             @id @default(autoincrement())
+  requestId   Int
+  request     MaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  productId   Int?
+  oemNumber   String?
+  description String?
+  qty         Decimal         @db.Decimal(18, 3)
+  unit        String?
+  requiredDate DateTime?
+  remarks     String?
+}
+
+model PurchaseRequisition {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  materialRequestId Int?
+  department   String?
+  warehouseId  Int?
+  requestedBy  String?
+  priority     String   @default("MEDIUM")
+  status       String   @default("DRAFT") // DRAFT SUBMITTED APPROVED REJECTED CONVERTED CLOSED CANCELLED
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        PurchaseRequisitionItem[]
+}
+
+model PurchaseRequisitionItem {
+  id          Int                 @id @default(autoincrement())
+  requisitionId Int
+  requisition PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  productId   Int?
+  description String?
+  qty         Decimal             @db.Decimal(18, 3)
+  unit        String?
+  requiredDate DateTime?
+  remarks     String?
+}
+
+model PurchaseEnquiry {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique // RFQ number
+  docDate      DateTime
+  requiredDate DateTime?
+  requisitionId Int?
+  warehouseId  Int?
+  status       String   @default("DRAFT") // DRAFT SENT QUOTED CLOSED CANCELLED
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        PurchaseEnquiryItem[]
+  suppliers    PurchaseEnquirySupplier[]
+}
+
+model PurchaseEnquiryItem {
+  id          Int             @id @default(autoincrement())
+  enquiryId   Int
+  enquiry     PurchaseEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  productId   Int?
+  description String?
+  qty         Decimal         @db.Decimal(18, 3)
+  unit        String?
+}
+
+model PurchaseEnquirySupplier {
+  id          Int             @id @default(autoincrement())
+  enquiryId   Int
+  enquiry     PurchaseEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  supplierId  Int
+  responseStatus String       @default("PENDING") // PENDING RESPONDED DECLINED
+  responseDate DateTime?
+  responseNotes String?
+}
+
+model SupplierQuotation {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  supplierRef  String?
+  enquiryId    Int?
+  supplierId   Int
+  docDate      DateTime
+  validUntil   DateTime?
+  currencyCode String   @default("AED")
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  paymentTerms String?
+  deliveryTerms String?
+  expectedDeliveryDate DateTime?
+  deliveryDays Int?
+  subtotal     Decimal  @default(0) @db.Decimal(18, 2)
+  discount     Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  total        Decimal  @default(0) @db.Decimal(18, 2)
+  status       String   @default("RECEIVED") // RECEIVED SELECTED REJECTED CONVERTED EXPIRED
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        SupplierQuotationItem[]
+}
+
+model SupplierQuotationItem {
+  id          Int               @id @default(autoincrement())
+  quotationId Int
+  quotation   SupplierQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId   Int?
+  description String?
+  qty         Decimal           @db.Decimal(18, 3)
+  unit        String?
+  rate        Decimal           @db.Decimal(18, 4)
+  discount    Decimal           @default(0) @db.Decimal(18, 2)
+  vatRate     Decimal           @default(0) @db.Decimal(6, 2)
+  vatAmount   Decimal           @default(0) @db.Decimal(18, 2)
+  amount      Decimal           @default(0) @db.Decimal(18, 2)
+}
+
+// Purchase order: orderType LOCAL | IMPORT
+model PurchaseOrder {
+  id            Int      @id @default(autoincrement())
+  docNo         String   @unique
+  orderType     String   @default("LOCAL")
+  docDate       DateTime
+  supplierId    Int
+  quotationId   Int?
+  quotationRef  String?
+  importRequestId Int?
+  warehouseId   Int?
+  currencyCode  String   @default("AED")
+  exchangeRate  Decimal  @default(1) @db.Decimal(18, 6)
+  paymentTerms  String?
+  deliveryTerms String?
+  expectedDate  DateTime?
+  remarks       String?
+  terms         String?  @db.Text
+  subtotal      Decimal  @default(0) @db.Decimal(18, 2)
+  discount      Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount     Decimal  @default(0) @db.Decimal(18, 2)
+  roundOff      Decimal  @default(0) @db.Decimal(18, 2)
+  total         Decimal  @default(0) @db.Decimal(18, 2)
+  status        String   @default("DRAFT") // DRAFT SUBMITTED PENDING_APPROVAL APPROVED PARTIALLY_RECEIVED FULLY_RECEIVED CLOSED CANCELLED (import adds: CONFIRMED PAYMENT_PENDING IN_TRANSIT ARRIVED CUSTOMS RECEIVED COMPLETED)
+  // import fields
+  supplierCountry String?
+  incoterms     String?
+  portOfLoading String?
+  portOfDestination String?
+  shippingMethod String?
+  shippingAgent String?
+  clearingAgent String?
+  createdBy     Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  items         PurchaseOrderItem[]
+  shipments     ImportShipment[]
+}
+
+model PurchaseOrderItem {
+  id          Int           @id @default(autoincrement())
+  orderId     Int
+  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   Int
+  oemNumber   String?
+  description String?
+  qty         Decimal       @db.Decimal(18, 3)
+  receivedQty Decimal       @default(0) @db.Decimal(18, 3)
+  invoicedQty Decimal       @default(0) @db.Decimal(18, 3)
+  unit        String?
+  rate        Decimal       @db.Decimal(18, 4)
+  discount    Decimal       @default(0) @db.Decimal(18, 2)
+  vatRate     Decimal       @default(0) @db.Decimal(6, 2)
+  vatAmount   Decimal       @default(0) @db.Decimal(18, 2)
+  amount      Decimal       @default(0) @db.Decimal(18, 2)
+}
+
+model ImportRequest {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  supplierId   Int?
+  warehouseId  Int?
+  status       String   @default("DRAFT") // DRAFT SUBMITTED APPROVED PROFORMA_RECEIVED CONVERTED CANCELLED
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        ImportRequestItem[]
+  proformas    SupplierProforma[]
+}
+
+model ImportRequestItem {
+  id          Int           @id @default(autoincrement())
+  requestId   Int
+  request     ImportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  productId   Int?
+  description String?
+  qty         Decimal       @db.Decimal(18, 3)
+  unit        String?
+}
+
+model SupplierProforma {
+  id           Int           @id @default(autoincrement())
+  docNo        String        @unique
+  supplierRef  String?
+  importRequestId Int?
+  importRequest ImportRequest? @relation(fields: [importRequestId], references: [id])
+  supplierId   Int
+  docDate      DateTime
+  currencyCode String        @default("USD")
+  exchangeRate Decimal       @default(1) @db.Decimal(18, 6)
+  incoterms    String?
+  total        Decimal       @default(0) @db.Decimal(18, 2)
+  status       String        @default("RECEIVED") // RECEIVED CONVERTED CANCELLED
+  remarks      String?
+  createdAt    DateTime      @default(now())
+  items        SupplierProformaItem[]
+}
+
+model SupplierProformaItem {
+  id          Int              @id @default(autoincrement())
+  proformaId  Int
+  proforma    SupplierProforma @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  productId   Int?
+  description String?
+  qty         Decimal          @db.Decimal(18, 3)
+  unit        String?
+  rate        Decimal          @db.Decimal(18, 4)
+  amount      Decimal          @default(0) @db.Decimal(18, 2)
+}
+
+model ImportShipment {
+  id            Int           @id @default(autoincrement())
+  shipmentNo    String        @unique
+  orderId       Int
+  order         PurchaseOrder @relation(fields: [orderId], references: [id])
+  containerNo   String?
+  billOfLading  String?
+  awb           String?
+  etd           DateTime?
+  eta           DateTime?
+  actualArrival DateTime?
+  shippingAgent String?
+  clearingAgent String?
+  status        String        @default("BOOKED") // BOOKED IN_TRANSIT ARRIVED CUSTOMS CLEARED RECEIVED
+  remarks       String?
+  createdAt     DateTime      @default(now())
+  items         ImportShipmentItem[]
+}
+
+model ImportShipmentItem {
+  id          Int            @id @default(autoincrement())
+  shipmentId  Int
+  shipment    ImportShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItemId Int
+  productId   Int
+  qty         Decimal        @db.Decimal(18, 3)
+  receivedQty Decimal        @default(0) @db.Decimal(18, 3)
+}
+
+model GoodsReceipt {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  grnType      String   @default("LOCAL") // LOCAL | IMPORT
+  docDate      DateTime
+  orderId      Int
+  supplierId   Int
+  shipmentId   Int?
+  warehouseId  Int
+  supplierDeliveryNo String?
+  status       String   @default("DRAFT") // DRAFT POSTED CANCELLED
+  invoiced     Boolean  @default(false)
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        GoodsReceiptItem[]
+}
+
+model GoodsReceiptItem {
+  id          Int          @id @default(autoincrement())
+  receiptId   Int
+  receipt     GoodsReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderItemId Int
+  productId   Int
+  orderedQty  Decimal      @default(0) @db.Decimal(18, 3)
+  previouslyReceived Decimal @default(0) @db.Decimal(18, 3)
+  qty         Decimal      @db.Decimal(18, 3) // current receipt
+  unitCost    Decimal      @default(0) @db.Decimal(18, 4) // in base currency
+  landedUnitCost Decimal   @default(0) @db.Decimal(18, 4)
+  invoicedQty Decimal      @default(0) @db.Decimal(18, 3)
+  locationId  Int?
+}
+
+// Landed cost document: applies to one or more import GRNs
+model LandedCost {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  receiptId    Int
+  allocationMethod String @default("VALUE") // QUANTITY VALUE WEIGHT VOLUME
+  productCost  Decimal  @default(0) @db.Decimal(18, 2)
+  totalAdditional Decimal @default(0) @db.Decimal(18, 2)
+  actualLandedCost Decimal @default(0) @db.Decimal(18, 2)
+  status       String   @default("DRAFT") // DRAFT POSTED CANCELLED
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  charges      LandedCostCharge[]
+  allocations  LandedCostAllocation[]
+}
+
+model LandedCostCharge {
+  id           Int        @id @default(autoincrement())
+  landedCostId Int
+  landedCost   LandedCost @relation(fields: [landedCostId], references: [id], onDelete: Cascade)
+  chargeType   String     // FREIGHT INSURANCE CUSTOMS_DUTY PORT_CHARGES CLEARING TRANSPORT HANDLING OTHER
+  description  String?
+  amount       Decimal    @db.Decimal(18, 2)
+  supplierId   Int?
+}
+
+model LandedCostAllocation {
+  id           Int        @id @default(autoincrement())
+  landedCostId Int
+  landedCost   LandedCost @relation(fields: [landedCostId], references: [id], onDelete: Cascade)
+  productId    Int
+  receiptItemId Int
+  qty          Decimal    @db.Decimal(18, 3)
+  baseCost     Decimal    @db.Decimal(18, 2)
+  allocated    Decimal    @db.Decimal(18, 2)
+  oldUnitCost  Decimal    @db.Decimal(18, 4)
+  newUnitCost  Decimal    @db.Decimal(18, 4)
+}
+
+model PurchaseInvoice {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  supplierInvoiceNo String?
+  invoiceType  String   @default("LOCAL") // LOCAL | IMPORT
+  docDate      DateTime
+  dueDate      DateTime?
+  supplierId   Int
+  orderId      Int?
+  receiptId    Int?
+  currencyCode String   @default("AED")
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  subtotal     Decimal  @default(0) @db.Decimal(18, 2)
+  discount     Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  roundOff     Decimal  @default(0) @db.Decimal(18, 2)
+  total        Decimal  @default(0) @db.Decimal(18, 2) // document currency
+  baseTotal    Decimal  @default(0) @db.Decimal(18, 2) // base currency
+  paidAmount   Decimal  @default(0) @db.Decimal(18, 2) // base currency
+  status       String   @default("DRAFT") // DRAFT POSTED PARTIALLY_PAID PAID CANCELLED
+  remarks      String?
+  journalId    Int?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        PurchaseInvoiceItem[]
+}
+
+model PurchaseInvoiceItem {
+  id          Int             @id @default(autoincrement())
+  invoiceId   Int
+  invoice     PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  orderItemId Int?
+  receiptItemId Int?
+  productId   Int?
+  description String?
+  qty         Decimal         @db.Decimal(18, 3)
+  unit        String?
+  rate        Decimal         @db.Decimal(18, 4)
+  discount    Decimal         @default(0) @db.Decimal(18, 2)
+  vatRate     Decimal         @default(0) @db.Decimal(6, 2)
+  vatAmount   Decimal         @default(0) @db.Decimal(18, 2)
+  amount      Decimal         @default(0) @db.Decimal(18, 2)
+}
+
+model PurchaseReturn {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  supplierId   Int
+  invoiceId    Int?
+  receiptId    Int?
+  warehouseId  Int
+  reason       String   @default("OTHER") // DAMAGED WRONG_ITEM EXCESS_QUANTITY QUALITY_ISSUE WARRANTY OTHER
+  subtotal     Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  total        Decimal  @default(0) @db.Decimal(18, 2)
+  status       String   @default("DRAFT") // DRAFT POSTED CANCELLED
+  creditNoteId Int?
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        PurchaseReturnItem[]
+}
+
+model PurchaseReturnItem {
+  id          Int            @id @default(autoincrement())
+  returnId    Int
+  return      PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId   Int
+  receiptItemId Int?
+  invoiceItemId Int?
+  qty         Decimal        @db.Decimal(18, 3)
+  rate        Decimal        @db.Decimal(18, 4)
+  vatRate     Decimal        @default(0) @db.Decimal(6, 2)
+  vatAmount   Decimal        @default(0) @db.Decimal(18, 2)
+  amount      Decimal        @default(0) @db.Decimal(18, 2)
+}
+
+// ============================================================
+// SALES
+// ============================================================
+model SalesEnquiry {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  customerId   Int
+  salesmanId   Int?
+  requiredDate DateTime?
+  status       String   @default("OPEN") // OPEN QUOTED CLOSED CANCELLED
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        SalesEnquiryItem[]
+}
+
+model SalesEnquiryItem {
+  id          Int          @id @default(autoincrement())
+  enquiryId   Int
+  enquiry     SalesEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  productId   Int?
+  description String?
+  qty         Decimal      @db.Decimal(18, 3)
+  remarks     String?
+}
+
+model SalesQuotation {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  validUntil   DateTime?
+  customerId   Int
+  salesmanId   Int?
+  enquiryId    Int?
+  warehouseId  Int?
+  currencyCode String   @default("AED")
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  paymentTerms String?
+  subtotal     Decimal  @default(0) @db.Decimal(18, 2)
+  discount     Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  roundOff     Decimal  @default(0) @db.Decimal(18, 2)
+  total        Decimal  @default(0) @db.Decimal(18, 2)
+  status       String   @default("DRAFT") // DRAFT SENT ACCEPTED CONVERTED EXPIRED REJECTED CANCELLED
+  remarks      String?
+  terms        String?  @db.Text
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        SalesQuotationItem[]
+}
+
+model SalesQuotationItem {
+  id          Int            @id @default(autoincrement())
+  quotationId Int
+  quotation   SalesQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId   Int
+  oemNumber   String?
+  description String?
+  qty         Decimal        @db.Decimal(18, 3)
+  unit        String?
+  rate        Decimal        @db.Decimal(18, 4)
+  discount    Decimal        @default(0) @db.Decimal(18, 2)
+  vatRate     Decimal        @default(0) @db.Decimal(6, 2)
+  vatAmount   Decimal        @default(0) @db.Decimal(18, 2)
+  amount      Decimal        @default(0) @db.Decimal(18, 2)
+}
+
+model ProformaInvoice {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  customerId   Int
+  quotationId  Int?
+  salesOrderId Int?
+  warehouseId  Int?
+  currencyCode String   @default("AED")
+  paymentTerms String?
+  subtotal     Decimal  @default(0) @db.Decimal(18, 2)
+  discount     Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  total        Decimal  @default(0) @db.Decimal(18, 2)
+  status       String   @default("DRAFT") // DRAFT ISSUED CONVERTED INVOICED CANCELLED
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        ProformaInvoiceItem[]
+}
+
+model ProformaInvoiceItem {
+  id          Int             @id @default(autoincrement())
+  proformaId  Int
+  proforma    ProformaInvoice @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  productId   Int
+  oemNumber   String?
+  description String?
+  qty         Decimal         @db.Decimal(18, 3)
+  unit        String?
+  rate        Decimal         @db.Decimal(18, 4)
+  discount    Decimal         @default(0) @db.Decimal(18, 2)
+  vatRate     Decimal         @default(0) @db.Decimal(6, 2)
+  vatAmount   Decimal         @default(0) @db.Decimal(18, 2)
+  amount      Decimal         @default(0) @db.Decimal(18, 2)
+}
+
+model SalesOrder {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  customerId   Int
+  salesmanId   Int?
+  quotationId  Int?
+  proformaId   Int?
+  warehouseId  Int
+  currencyCode String   @default("AED")
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  paymentTerms String?
+  deliveryDate DateTime?
+  customerPoNo String?
+  subtotal     Decimal  @default(0) @db.Decimal(18, 2)
+  discount     Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  roundOff     Decimal  @default(0) @db.Decimal(18, 2)
+  total        Decimal  @default(0) @db.Decimal(18, 2)
+  status       String   @default("DRAFT") // DRAFT PENDING_APPROVAL APPROVED PARTIALLY_DELIVERED DELIVERED INVOICED CLOSED CANCELLED
+  remarks      String?
+  terms        String?  @db.Text
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        SalesOrderItem[]
+}
+
+model SalesOrderItem {
+  id           Int        @id @default(autoincrement())
+  orderId      Int
+  order        SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    Int
+  oemNumber    String?
+  description  String?
+  qty          Decimal    @db.Decimal(18, 3)
+  pickedQty    Decimal    @default(0) @db.Decimal(18, 3)
+  deliveredQty Decimal    @default(0) @db.Decimal(18, 3)
+  invoicedQty  Decimal    @default(0) @db.Decimal(18, 3)
+  unit         String?
+  rate         Decimal    @db.Decimal(18, 4)
+  discount     Decimal    @default(0) @db.Decimal(18, 2)
+  vatRate      Decimal    @default(0) @db.Decimal(6, 2)
+  vatAmount    Decimal    @default(0) @db.Decimal(18, 2)
+  amount       Decimal    @default(0) @db.Decimal(18, 2)
+}
+
+model PickingList {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  salesOrderId Int
+  warehouseId  Int
+  status       String   @default("OPEN") // OPEN PARTIALLY_PICKED PICKED CANCELLED
+  pickedBy     String?
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        PickingListItem[]
+}
+
+model PickingListItem {
+  id          Int         @id @default(autoincrement())
+  pickingId   Int
+  picking     PickingList @relation(fields: [pickingId], references: [id], onDelete: Cascade)
+  orderItemId Int
+  productId   Int
+  rack        String?
+  shelf       String?
+  bin         String?
+  orderedQty  Decimal     @db.Decimal(18, 3)
+  reservedQty Decimal     @default(0) @db.Decimal(18, 3)
+  pickedQty   Decimal     @default(0) @db.Decimal(18, 3)
+}
+
+model PackingList {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  salesOrderId Int
+  pickingId    Int?
+  customerId   Int
+  boxes        Int      @default(1)
+  totalWeight  Decimal  @default(0) @db.Decimal(12, 3)
+  dimensions   String?
+  status       String   @default("DRAFT") // DRAFT PACKED DELIVERED CANCELLED
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        PackingListItem[]
+}
+
+model PackingListItem {
+  id          Int         @id @default(autoincrement())
+  packingId   Int
+  packing     PackingList @relation(fields: [packingId], references: [id], onDelete: Cascade)
+  productId   Int
+  boxNo       Int         @default(1)
+  qty         Decimal     @db.Decimal(18, 3)
+  weight      Decimal     @default(0) @db.Decimal(12, 3)
+}
+
+model DeliveryNote {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  salesOrderId Int
+  pickingId    Int?
+  packingId    Int?
+  customerId   Int
+  warehouseId  Int
+  deliveryAddress String?
+  driver       String?
+  vehicleNo    String?
+  status       String   @default("DRAFT") // DRAFT POSTED CANCELLED
+  invoiced     Boolean  @default(false)
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        DeliveryNoteItem[]
+}
+
+model DeliveryNoteItem {
+  id          Int          @id @default(autoincrement())
+  deliveryId  Int
+  delivery    DeliveryNote @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  orderItemId Int
+  productId   Int
+  qty         Decimal      @db.Decimal(18, 3)
+  unitCost    Decimal      @default(0) @db.Decimal(18, 4) // cost at delivery (for COGS)
+  invoicedQty Decimal      @default(0) @db.Decimal(18, 3)
+}
+
+model SalesInvoice {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  dueDate      DateTime?
+  customerId   Int
+  salesmanId   Int?
+  salesOrderId Int?
+  deliveryId   Int?
+  proformaId   Int?
+  trn          String?
+  address      String?
+  currencyCode String   @default("AED")
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  paymentTerms String?
+  subtotal     Decimal  @default(0) @db.Decimal(18, 2)
+  discount     Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  roundOff     Decimal  @default(0) @db.Decimal(18, 2)
+  total        Decimal  @default(0) @db.Decimal(18, 2)
+  baseTotal    Decimal  @default(0) @db.Decimal(18, 2)
+  cogs         Decimal  @default(0) @db.Decimal(18, 2)
+  receivedAmount Decimal @default(0) @db.Decimal(18, 2) // base currency
+  status       String   @default("DRAFT") // DRAFT POSTED PARTIALLY_PAID PAID CANCELLED
+  remarks      String?
+  journalId    Int?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        SalesInvoiceItem[]
+}
+
+model SalesInvoiceItem {
+  id          Int          @id @default(autoincrement())
+  invoiceId   Int
+  invoice     SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  orderItemId Int?
+  deliveryItemId Int?
+  productId   Int
+  oemNumber   String?
+  description String?
+  qty         Decimal      @db.Decimal(18, 3)
+  unit        String?
+  rate        Decimal      @db.Decimal(18, 4)
+  discount    Decimal      @default(0) @db.Decimal(18, 2)
+  vatRate     Decimal      @default(0) @db.Decimal(6, 2)
+  vatAmount   Decimal      @default(0) @db.Decimal(18, 2)
+  amount      Decimal      @default(0) @db.Decimal(18, 2)
+  unitCost    Decimal      @default(0) @db.Decimal(18, 4)
+}
+
+// Flow: SalesReturn -> Return Receipt -> Inspection -> (Resalable/Damaged) -> Inventory -> Credit Note
+model SalesReturn {
+  id           Int      @id @default(autoincrement())
+  docNo        String   @unique
+  docDate      DateTime
+  customerId   Int
+  invoiceId    Int
+  warehouseId  Int
+  reason       String?
+  status       String   @default("DRAFT") // DRAFT RECEIVED INSPECTED POSTED CANCELLED
+  receivedDate DateTime?
+  inspectedDate DateTime?
+  subtotal     Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount    Decimal  @default(0) @db.Decimal(18, 2)
+  total        Decimal  @default(0) @db.Decimal(18, 2)
+  creditNoteId Int?
+  remarks      String?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  items        SalesReturnItem[]
+}
+
+model SalesReturnItem {
+  id          Int         @id @default(autoincrement())
+  returnId    Int
+  return      SalesReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  invoiceItemId Int?
+  productId   Int
+  qty         Decimal     @db.Decimal(18, 3)
+  receivedQty Decimal     @default(0) @db.Decimal(18, 3)
+  resalableQty Decimal    @default(0) @db.Decimal(18, 3)
+  damagedQty  Decimal     @default(0) @db.Decimal(18, 3)
+  rate        Decimal     @db.Decimal(18, 4)
+  vatRate     Decimal     @default(0) @db.Decimal(6, 2)
+  vatAmount   Decimal     @default(0) @db.Decimal(18, 2)
+  amount      Decimal     @default(0) @db.Decimal(18, 2)
+  unitCost    Decimal     @default(0) @db.Decimal(18, 4)
+}
+
+// ============================================================
+// FINANCE
+// ============================================================
+// type: ASSET LIABILITY EQUITY REVENUE COGS EXPENSE
+model Account {
+  id         Int       @id @default(autoincrement())
+  code       String    @unique
+  name       String
+  type       String
+  parentId   Int?
+  parent     Account?  @relation("AccountTree", fields: [parentId], references: [id])
+  children   Account[] @relation("AccountTree")
+  isGroup    Boolean   @default(false)
+  // systemKey identifies accounts used by auto-posting: CASH BANK AR INVENTORY AP VAT_INPUT VAT_OUTPUT SALES COGS FREIGHT_CLEARING OPENING_EQUITY ROUND_OFF GRNI ...
+  systemKey  String?   @unique
+  isBank     Boolean   @default(false)
+  isActive   Boolean   @default(true)
+  lines      JournalLine[]
+}
+
+model JournalEntry {
+  id         Int       @id @default(autoincrement())
+  entryNo    String    @unique
+  entryDate  DateTime
+  entryType  String    @default("AUTO") // AUTO JOURNAL DEBIT_NOTE CREDIT_NOTE OPENING RECEIPT PAYMENT
+  sourceType String?
+  sourceId   Int?
+  sourceNo   String?
+  narration  String?
+  status     String    @default("POSTED") // POSTED REVERSED
+  totalDebit Decimal   @default(0) @db.Decimal(18, 2)
+  createdBy  Int?
+  createdAt  DateTime  @default(now())
+  lines      JournalLine[]
+
+  @@index([sourceType, sourceId])
+}
+
+model JournalLine {
+  id          Int          @id @default(autoincrement())
+  journalId   Int
+  journal     JournalEntry @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  accountId   Int
+  account     Account      @relation(fields: [accountId], references: [id])
+  debit       Decimal      @default(0) @db.Decimal(18, 2)
+  credit      Decimal      @default(0) @db.Decimal(18, 2)
+  // subledger party
+  partyType   String?      // CUSTOMER | SUPPLIER
+  partyId     Int?
+  description String?
+  vatCode     String?
+  vatAmount   Decimal      @default(0) @db.Decimal(18, 2)
+
+  @@index([accountId])
+  @@index([partyType, partyId])
+}
+
+// Receipts (customer/other) & Payments (supplier/other). mode: CASH | BANK
+model Voucher {
+  id           Int      @id @default(autoincrement())
+  voucherNo    String   @unique
+  voucherType  String   // RECEIPT | PAYMENT
+  mode         String   @default("BANK") // CASH | BANK
+  voucherDate  DateTime
+  partyType    String?  // CUSTOMER | SUPPLIER | OTHER
+  partyId      Int?
+  accountId    Int      // cash/bank account
+  counterAccountId Int? // for OTHER party
+  amount       Decimal  @db.Decimal(18, 2)
+  reference    String?  // cheque / txn ref
+  narration    String?
+  status       String   @default("POSTED") // DRAFT POSTED CANCELLED
+  journalId    Int?
+  createdBy    Int?
+  createdAt    DateTime @default(now())
+  allocations  VoucherAllocation[]
+}
+
+// Allocates a voucher amount to invoices (docType SALES_INVOICE | PURCHASE_INVOICE | PURCHASE_ORDER(advance))
+model VoucherAllocation {
+  id        Int     @id @default(autoincrement())
+  voucherId Int
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  docType   String
+  docId     Int
+  docNo     String?
+  amount    Decimal @db.Decimal(18, 2)
+}
+
+// Credit / Debit notes. noteType CREDIT | DEBIT ; partyType CUSTOMER | SUPPLIER
+model Note {
+  id         Int      @id @default(autoincrement())
+  noteNo     String   @unique
+  noteType   String
+  partyType  String
+  partyId    Int
+  noteDate   DateTime
+  refType    String?
+  refId      Int?
+  refNo      String?
+  subtotal   Decimal  @default(0) @db.Decimal(18, 2)
+  vatAmount  Decimal  @default(0) @db.Decimal(18, 2)
+  total      Decimal  @default(0) @db.Decimal(18, 2)
+  reason     String?
+  status     String   @default("POSTED") // DRAFT POSTED CANCELLED
+  journalId  Int?
+  createdBy  Int?
+  createdAt  DateTime @default(now())
+}
+
+// ============================================================
+// AMC (Annual Maintenance Contract)
+// ============================================================
+// contractType: COMPREHENSIVE | LABOUR_ONLY | PARTS_ONLY
+// status:       DRAFT | ACTIVE | EXPIRED | RENEWED | CANCELLED
+model AmcContract {
+  id              Int          @id @default(autoincrement())
+  contractNo      String       @unique
+  customerId      Int
+  customer        Customer     @relation(fields: [customerId], references: [id])
+  productId       Int?
+  product         Product?     @relation(fields: [productId], references: [id])
+  equipmentDesc   String?
+  serialNo        String?
+  contractType    String       @default("COMPREHENSIVE")
+  startDate       DateTime
+  endDate         DateTime
+  amount          Decimal      @default(0) @db.Decimal(18, 2)
+  vatRate         Decimal      @default(5) @db.Decimal(6, 2)
+  vatAmount       Decimal      @default(0) @db.Decimal(18, 2)
+  total           Decimal      @default(0) @db.Decimal(18, 2)
+  visitCount      Int          @default(4)
+  status          String       @default("DRAFT")
+  salesmanId      Int?
+  notes           String?      @db.Text
+  renewedFromId   Int?
+  createdBy       Int?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  visits          AmcVisit[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([endDate])
+}
+
+// visitType: PREVENTIVE | CORRECTIVE | EMERGENCY
+// status:    SCHEDULED | IN_PROGRESS | COMPLETED | CANCELLED
+model AmcVisit {
+  id           Int         @id @default(autoincrement())
+  contractId   Int
+  contract     AmcContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  visitNo      Int
+  scheduledDate DateTime
+  completedDate DateTime?
+  visitType    String      @default("PREVENTIVE")
+  status       String      @default("SCHEDULED")
+  technicianName String?
+  findings     String?     @db.Text
+  partsUsed    String?     @db.Text
+  createdAt    DateTime    @default(now())
+
+  @@index([contractId])
+  @@index([scheduledDate])
+}
+
+// ============================================================
+// HR (Human Resources)
+// ============================================================
+
+model Department {
+  id          Int          @id @default(autoincrement())
+  code        String       @unique
+  name        String
+  managerId   Int?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  employees   Employee[]
+}
+
+model Designation {
+  id          Int          @id @default(autoincrement())
+  code        String       @unique
+  name        String
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  employees   Employee[]
+}
+
+// gender: MALE | FEMALE | OTHER
+// employmentType: FULL_TIME | PART_TIME | CONTRACT | PROBATION
+// status: ACTIVE | RESIGNED | TERMINATED | ON_LEAVE
+model Employee {
+  id               Int          @id @default(autoincrement())
+  employeeNo       String       @unique
+  firstName        String
+  lastName         String
+  fullName         String
+  gender           String       @default("MALE")
+  dob              DateTime?
+  nationality      String?
+  phone            String?
+  email            String?
+  address          String?      @db.Text
+  departmentId     Int?
+  department       Department?  @relation(fields: [departmentId], references: [id])
+  designationId    Int?
+  designation      Designation? @relation(fields: [designationId], references: [id])
+  branchId         Int?
+  employmentType   String       @default("FULL_TIME")
+  joinDate         DateTime
+  endDate          DateTime?
+  basicSalary      Decimal      @default(0) @db.Decimal(18, 2)
+  housingAllowance Decimal      @default(0) @db.Decimal(18, 2)
+  transportAllowance Decimal    @default(0) @db.Decimal(18, 2)
+  otherAllowance   Decimal      @default(0) @db.Decimal(18, 2)
+  status           String       @default("ACTIVE")
+  passportNo       String?
+  passportExpiry   DateTime?
+  visaNo           String?
+  visaExpiry       DateTime?
+  emiratesId       String?
+  emiratesExpiry   DateTime?
+  notes            String?      @db.Text
+  createdBy        Int?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  attendance       Attendance[]
+  leaveRequests    LeaveRequest[]
+  payrolls         Payroll[]
+
+  @@index([departmentId])
+  @@index([status])
+}
+
+// attendanceType: REGULAR | OVERTIME | PUBLIC_HOLIDAY | SICK
+// status: PRESENT | ABSENT | HALF_DAY | ON_LEAVE | HOLIDAY
+model Attendance {
+  id             Int       @id @default(autoincrement())
+  employeeId     Int
+  employee       Employee  @relation(fields: [employeeId], references: [id])
+  attendanceDate DateTime
+  checkIn        DateTime?
+  checkOut       DateTime?
+  hoursWorked    Decimal   @default(0) @db.Decimal(6, 2)
+  overtimeHours  Decimal   @default(0) @db.Decimal(6, 2)
+  status         String    @default("PRESENT")
+  remarks        String?
+  createdAt      DateTime  @default(now())
+
+  @@unique([employeeId, attendanceDate])
+  @@index([attendanceDate])
+  @@index([employeeId])
+}
+
+// leaveType: ANNUAL | SICK | UNPAID | MATERNITY | PATERNITY | EMERGENCY | COMPASSIONATE
+// status: PENDING | APPROVED | REJECTED | CANCELLED
+model LeaveRequest {
+  id           Int       @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee  @relation(fields: [employeeId], references: [id])
+  leaveType    String    @default("ANNUAL")
+  fromDate     DateTime
+  toDate       DateTime
+  days         Decimal   @default(1) @db.Decimal(6, 2)
+  reason       String?   @db.Text
+  status       String    @default("PENDING")
+  approvedBy   Int?
+  approvedAt   DateTime?
+  remarks      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([fromDate, toDate])
+}
+
+// Payroll per employee per period (e.g. monthly)
+// status: DRAFT | PROCESSED | PAID
+model Payroll {
+  id                Int       @id @default(autoincrement())
+  payrollNo         String    @unique
+  employeeId        Int
+  employee          Employee  @relation(fields: [employeeId], references: [id])
+  periodFrom        DateTime
+  periodTo          DateTime
+  basicSalary       Decimal   @default(0) @db.Decimal(18, 2)
+  housingAllowance  Decimal   @default(0) @db.Decimal(18, 2)
+  transportAllowance Decimal  @default(0) @db.Decimal(18, 2)
+  otherAllowance    Decimal   @default(0) @db.Decimal(18, 2)
+  overtimePay       Decimal   @default(0) @db.Decimal(18, 2)
+  deductions        Decimal   @default(0) @db.Decimal(18, 2)
+  grossSalary       Decimal   @default(0) @db.Decimal(18, 2)
+  netSalary         Decimal   @default(0) @db.Decimal(18, 2)
+  daysWorked        Decimal   @default(0) @db.Decimal(6, 2)
+  daysAbsent        Decimal   @default(0) @db.Decimal(6, 2)
+  overtimeHours     Decimal   @default(0) @db.Decimal(6, 2)
+  notes             String?   @db.Text
+  status            String    @default("DRAFT")
+  processedBy       Int?
+  processedAt       DateTime?
+  createdBy         Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([employeeId])
+  @@index([periodFrom])
+  @@index([status])
+}

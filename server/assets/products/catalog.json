@@ -1,0 +1,93 @@
+[
+  {
+    "code": "GX-12025",
+    "name": "Ground Rail Fiber Laser Cutting Machine",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-12025  GROUND RAIL FIBER LASER CUTTING MACHINE.jpeg",
+    "webp": "GX-12025.webp",
+    "print": "GX-12025.jpg"
+  },
+  {
+    "code": "GX-15300",
+    "name": "Fiber Laser Cutting Machine",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-15300  FIBER LASER CUTTING MACHINE.jpeg",
+    "webp": "GX-15300.webp",
+    "print": "GX-15300.jpg"
+  },
+  {
+    "code": "GX-1530AB",
+    "name": "Full Surround Switching Station Fiber Laser",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-1530AB,GX-6020AB  FULL SURROUND SWITCHING STATION FIBER LASER.jpeg",
+    "webp": "GX-1530AB.webp",
+    "print": "GX-1530AB.jpg",
+    "alternateCode": "GX-6020AB"
+  },
+  {
+    "code": "GX-1540-G",
+    "name": "Sheet & Tube Fiber Laser Cutter",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-1540-G  SHEET & TUBE FIBER LASER CUTTER .jpeg",
+    "webp": "GX-1540-G.webp",
+    "print": "GX-1540-G.jpg"
+  },
+  {
+    "code": "GX-1560",
+    "name": "Laser Cutter for Door Sheet",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-1560  LASER CUTTER FOR DOOR SHEET.jpeg",
+    "webp": "GX-1560.webp",
+    "print": "GX-1560.jpg"
+  },
+  {
+    "code": "GX-2040 Z",
+    "name": "Fiber Laser Cutter",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-2040 Z  FIBER LASER CUTTER.jpeg",
+    "webp": "GX-2040-Z.webp",
+    "print": "GX-2040-Z.jpg"
+  },
+  {
+    "code": "GX-4020AB",
+    "name": "All Cover Exchange Platform Fiber Laser",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-4020AB  ALL COVER EXCHANGE PLATFORM FIBER LASER .jpeg",
+    "webp": "GX-4020AB.webp",
+    "print": "GX-4020AB.jpg"
+  },
+  {
+    "code": "GX-6020Z",
+    "name": "Fiber Laser Cutting Machine",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-6020Z  FIBER LASER CUTTING MACHINE.jpeg",
+    "webp": "GX-6020Z.webp",
+    "print": "GX-6020Z.jpg"
+  },
+  {
+    "code": "GX-CG60X",
+    "name": "Multi Card Fiber Laser Cutting Machine",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "GX-CG60X  MULTI CARD FIBER LASER CUTTING MACHINE.jpeg",
+    "webp": "GX-CG60X.webp",
+    "print": "GX-CG60X.jpg"
+  },
+  {
+    "code": "GX-CG60",
+    "name": "Pipe Cutter",
+    "brand": "GXU",
+    "category": "FIBER-LASER",
+    "source": "PIPE CUTTER  GX-CG60.jpeg",
+    "webp": "GX-CG60.webp",
+    "print": "GX-CG60.jpg"
+  }
+]

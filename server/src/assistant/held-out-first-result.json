@@ -1,0 +1,59 @@
+{
+  "tuned": {
+    "passed": 200,
+    "total": 200,
+    "failures": []
+  },
+  "negative": {
+    "passed": 20,
+    "total": 20,
+    "failures": []
+  },
+  "entities": {
+    "passed": 24,
+    "total": 24,
+    "failures": []
+  },
+  "followups": {
+    "passed": 4,
+    "total": 4,
+    "failures": []
+  },
+  "clarifications": {
+    "passed": 4,
+    "total": 4,
+    "failures": []
+  },
+  "fresh-regression": {
+    "passed": 50,
+    "total": 50,
+    "failures": []
+  },
+  "held-out": {
+    "passed": 49,
+    "total": 50,
+    "failures": [
+      {
+        "case": {
+          "intent": "low_stock",
+          "message": "show the reorder shortage report"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'low_stock'\n"
+      }
+    ]
+  },
+  "held-out-negative": {
+    "passed": 8,
+    "total": 10,
+    "failures": [
+      {
+        "case": "make me a purchase order",
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'purchase_orders'\n- null\n"
+      },
+      {
+        "case": "predict our sales next year",
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'sales_summary'\n- null\n"
+      }
+    ]
+  }
+}

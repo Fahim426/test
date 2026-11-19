@@ -1,0 +1,65 @@
+{
+  "tuned": {
+    "passed": 200,
+    "total": 200,
+    "failures": []
+  },
+  "negative": {
+    "passed": 20,
+    "total": 20,
+    "failures": []
+  },
+  "entities": {
+    "passed": 26,
+    "total": 26,
+    "failures": []
+  },
+  "followups": {
+    "passed": 4,
+    "total": 4,
+    "failures": []
+  },
+  "clarifications": {
+    "passed": 4,
+    "total": 4,
+    "failures": []
+  },
+  "safety-regression": {
+    "passed": 9,
+    "total": 9,
+    "failures": []
+  },
+  "number-clarification": {
+    "passed": 1,
+    "total": 1,
+    "failures": []
+  },
+  "ambiguity-safety": {
+    "passed": 3,
+    "total": 3,
+    "failures": []
+  },
+  "fresh-regression": {
+    "passed": 50,
+    "total": 50,
+    "failures": []
+  },
+  "held-out": {
+    "passed": 49,
+    "total": 50,
+    "failures": [
+      {
+        "case": {
+          "intent": "low_stock",
+          "message": "show the reorder shortage report"
+        },
+        "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'low_stock'\n"
+      }
+    ]
+  },
+  "held-out-negative": {
+    "passed": 10,
+    "total": 10,
+    "failures": []
+  }
+}
