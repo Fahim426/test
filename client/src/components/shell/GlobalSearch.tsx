@@ -1,3 +1,4 @@
+import { useFeatures } from '@/hooks/useFeatures';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Loader2, ScanSearch } from 'lucide-react';
@@ -33,6 +34,7 @@ function normalize(data: unknown): SearchGroup[] {
 }
 
 export function GlobalSearch() {
+  const features = useFeatures();
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [open, setOpen] = useState(false);
@@ -106,9 +108,9 @@ export function GlobalSearch() {
       if (!v) return;
       // exact part number (internal code / OEM / alternate) -> part lookup; otherwise highlighted result
       const exact = flat.find((i) => i.type === 'PRODUCT' && (i.no?.toLowerCase() === v.toLowerCase() || String(i.extra?.matchedPartNumber ?? '').toLowerCase() === v.toLowerCase() || String(i.extra?.oemNumber ?? '').toLowerCase() === v.toLowerCase()));
-      if (exact) openPart(v);
+      if (exact && features.partNumbers) openPart(v);
       else if (flat[hi] && debounced === v) openItem(flat[hi]);
-      else openPart(v);
+      else if (features.partNumbers) openPart(v);
     }
   };
 
@@ -131,10 +133,10 @@ export function GlobalSearch() {
       {isFetching && <Loader2 size={13} className="absolute right-2 top-[7px] animate-spin text-brand" />}
       {open && q.trim() && (
         <div className="absolute left-0 right-0 top-8 z-[120] max-h-[70vh] overflow-auto border border-slate-400 bg-white text-slate-800 shadow-lg">
-          <button className="flex w-full items-center gap-2 border-b border-app-border bg-brand-light px-2 py-1 text-left text-[12px] hover:bg-brand-mid" onClick={() => openPart(q.trim())}>
+          {features.partNumbers && <button className="flex w-full items-center gap-2 border-b border-app-border bg-brand-light px-2 py-1 text-left text-[12px] hover:bg-brand-mid" onClick={() => openPart(q.trim())}>
             <ScanSearch size={13} className="text-brand" /> Part lookup for <b>{q.trim()}</b>
             <span className="ml-auto text-[10px] text-slate-500">Enter</span>
-          </button>
+          </button>}
           {error ? <div className="p-2 text-[12px] text-red-600">Search failed.</div> : null}
           {!isFetching && data && data.length === 0 && <div className="p-3 text-center text-[12px] text-slate-500">No results</div>}
           {data?.map((g) => (

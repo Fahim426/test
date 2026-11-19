@@ -1,0 +1,7 @@
+{
+  "company": {"code":"CUSTOMER01","name":"Example Trading LLC","country":"United Arab Emirates","baseCurrency":"AED","address":"","phone":"","email":"","trn":""},
+  "appName":"Example ERP",
+  "industry":"general",
+  "vatRate":5,
+  "adminUsername":"admin"
+}

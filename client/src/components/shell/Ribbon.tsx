@@ -5,7 +5,7 @@ import { useUi } from '@/store/ui';
 import { useWorkspaceStore } from '@/store/workspace';
 import { getScreen } from '@/screens/registry';
 import { cn } from '@/lib/cn';
-import { useFeatures } from '@/hooks/useFeatures';
+import { useFeatures, screenEnabled } from '@/hooks/useFeatures';
 
 function RibbonButton({ item, active, onClick, small }: { item: RibbonItem; active: boolean; onClick: () => void; small?: boolean }) {
   const Icon = item.icon;
@@ -48,7 +48,7 @@ function RibbonPanel({ moduleKey, onPick }: { moduleKey: string; onPick?: () => 
     onPick?.();
   };
   const filterItem = (it: RibbonItem) => {
-    if (it.id === 'vehicle-compatibility' && !features.vehicleCompatibility) return false;
+    if (!screenEnabled(it.id, features)) return false;
     return true;
   };
   return (

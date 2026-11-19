@@ -13,6 +13,9 @@ export async function productPhotoPath(id: number, print = false): Promise<strin
     await fs.access(p);
     return p;
   }
+  // Bundled catalogue photos belong only to the demo, never to another customer's matching product code.
+  const demo = await prisma.systemSetting.findUnique({ where: { key: 'demo.fortune7.activity.v1' } });
+  if (!demo) return null;
   const product = await prisma.product.findUnique({ where: { id }, select: { code: true } });
   if (!product) return null;
   const slug = product.code.replace(/[^A-Za-z0-9_-]/g, '-');

@@ -299,7 +299,7 @@ export const ribbonConfig: RibbonModule[] = [
       { label: 'Security', items: [i('users', 'Users', Users), i('roles', 'Roles', ShieldCheck), i('permissions', 'Permissions', KeyRound)] },
       {
         label: 'Configuration',
-        items: [i('document-numbering', 'Document Numbering', Hash), i('approval-workflows', 'Approval Workflows', Workflow), i('system-settings', 'System Settings', Settings)],
+        items: [i('document-numbering', 'Document Numbering', Hash), i('approval-workflows', 'Approval Workflows', Workflow), i('company-configuration', 'Company & Modules', Settings), i('system-settings', 'System Settings', Settings)],
       },
       { label: 'Monitoring', items: [i('audit-logs', 'Audit Logs', ScrollText)] },
       { label: 'Communication', items: [i('email-settings', 'Email', Mail), i('sms-settings', 'SMS', MessageSquare)] },

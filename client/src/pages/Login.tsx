@@ -1,3 +1,5 @@
+import { CompanyLogo } from '@/components/CompanyLogo';
+import { useProductConfig } from '@/hooks/useProductConfig';
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -12,6 +14,7 @@ const schema = z.object({ username: z.string().min(1, 'Username is required'), p
 type Form = z.infer<typeof schema>;
 
 export default function Login() {
+  const { config } = useProductConfig();
   const token = useAuth((s) => s.accessToken);
   const login = useAuth((s) => s.login);
   const nav = useNavigate();
@@ -33,10 +36,10 @@ export default function Login() {
     <div className="flex h-full items-center justify-center bg-app-bg">
       <div className="w-[380px] border border-app-border bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-brand-dark bg-brand px-4 py-3 text-white">
-          <img src="/brand/fortune7-logo.jpeg" alt="Fortune 7" className="h-12 w-32 shrink-0 rounded bg-white object-contain" />
+          <CompanyLogo className="h-16 w-40" />
           <div>
-            <div className="text-[15px] font-semibold leading-tight">Fortune 7 ERP</div>
-            <div className="text-[11px] opacity-80">Printing &amp; industrial equipment trading</div>
+            <div className="text-[15px] font-semibold leading-tight">{config.company?.name || config.appName}</div>
+            <div className="text-[11px] opacity-80">Business management workspace</div>
           </div>
         </div>
         <form onSubmit={submit} className="flex flex-col gap-3 p-4">

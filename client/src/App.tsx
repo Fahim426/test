@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useProductConfig } from '@/hooks/useProductConfig';
 import AssistantChat from '@/components/AssistantChat';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/store/auth';
@@ -12,6 +14,8 @@ function Protected({ children }: { children: JSX.Element }) {
 }
 
 export default function App() {
+  const { config } = useProductConfig();
+  useEffect(() => { document.title = config.appName; }, [config.appName]);
   return (
     <>
       <Routes>

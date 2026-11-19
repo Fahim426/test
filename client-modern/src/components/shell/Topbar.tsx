@@ -1,3 +1,4 @@
+import { CompanyLogo } from '@/components/CompanyLogo';
 import { ReminderBell } from './ReminderBell';
 import { DemoBadge } from './DemoBadge';
 import { useState } from 'react';
@@ -206,9 +207,9 @@ export function Topbar() {
   return (
     <header className="no-print sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface/90 px-4 backdrop-blur-md">
       <div className="flex shrink-0 items-center gap-2.5">
-        <img src="/brand/fortune7-logo.jpeg" alt="Fortune 7" className="h-9 w-[92px] shrink-0 rounded bg-white object-contain" />
+        <CompanyLogo className="h-9 w-[92px]" />
         <div className="hidden leading-tight xl:block">
-          <div className="max-w-[170px] truncate text-[14px] font-semibold text-ink">{company.data?.name ?? 'Fortune 7'}</div>
+          <div className="max-w-[170px] truncate text-[14px] font-semibold text-ink">{company.data?.name ?? 'Business ERP'}</div>
           <div className="flex items-center gap-1.5 text-[11px] text-ink-faint">ERP workspace <DemoBadge /></div>
         </div>
       </div>

@@ -12,3 +12,6 @@ local-runtime/
 .local-mysql/
 .local-run/
 server/.env
+
+.env.local
+.env.*.local

@@ -1,4 +1,6 @@
-import { companyLogoPath, companyLogoDataUri, drawCompanyLogo } from './report-brand';
+import sharp from 'sharp';
+import { companyLogoDataUri, drawCompanyLogo } from './report-brand';
+import { readCompanyLogo } from './product-config';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { z } from 'zod';
@@ -74,7 +76,7 @@ export function fmtCell(v: unknown, t: ColType): string {
 
 async function companyInfo() {
   const c = await prisma.company.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' } });
-  return { name: c?.name ?? 'SmartSpare ERP', trn: c?.trn ?? '', address: c?.address ?? '', phone: c?.phone ?? '', email: c?.email ?? '', currency: c?.baseCurrency ?? 'AED' };
+  return { name: c?.name ?? 'Business ERP', trn: c?.trn ?? '', address: c?.address ?? '', phone: c?.phone ?? '', email: c?.email ?? '', currency: c?.baseCurrency ?? 'AED' };
 }
 export { companyInfo };
 
@@ -119,8 +121,13 @@ export async function toXlsx(inp: ExportInput): Promise<Buffer> {
   const ws = wb.addWorksheet(inp.title.replace(/[\\/*?:[\]]/g, ' ').slice(0, 31) || 'Report', { views: [] });
   const ncols = inp.columns.length;
   const types = inp.columns.map((c) => typeOf(c, inp.rows.find((r) => getPath(r, c.key) != null) ? getPath(inp.rows.find((r) => getPath(r, c.key) != null), c.key) : undefined));
-  const logoId = wb.addImage({ filename: companyLogoPath, extension: 'jpeg' });
-  ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: 220, height: 85 } });
+  const logo = await readCompanyLogo();
+  if (logo) {
+    const logoId = wb.addImage({ filename: logo.file, extension: logo.file.endsWith('.png') ? 'png' : 'jpeg' });
+    const meta = await sharp(logo.data).metadata();
+    const scale = Math.min(220 / (meta.width || 220), 85 / (meta.height || 85));
+    ws.addImage(logoId, { tl: { col: 0, row: 0 }, ext: { width: (meta.width || 220) * scale, height: (meta.height || 85) * scale } });
+  }
   for (let r = 1; r <= 5; r++) ws.getRow(r).height = 15;
   let rowNo = 7;
   const titleRow = (text: string, size: number, bold = true, color = 'FF1F2937') => {
@@ -203,7 +210,7 @@ export interface PdfCol {
 export const PDF_COLORS = { head: '#1E3A5F', zebra: '#F8FAFC', line: '#CBD5E1', text: '#111827', muted: '#6B7280' };
 
 export function newDoc(landscape: boolean, size: 'A4' = 'A4') {
-  const doc = new PDFDocument({ size, layout: landscape ? 'landscape' : 'portrait', margin: 36, bufferPages: true, info: { Producer: 'SmartSpare ERP' } });
+  const doc = new PDFDocument({ size, layout: landscape ? 'landscape' : 'portrait', margin: 36, bufferPages: true, info: { Producer: 'Business ERP' } });
   const chunks: Buffer[] = [];
   doc.on('data', (c: Buffer) => chunks.push(c));
   const done = new Promise<Buffer>((resolve, reject) => {
@@ -296,7 +303,7 @@ export async function toPdf(inp: ExportInput): Promise<Buffer> {
   const width = doc.page.width - left - doc.page.margins.right;
   const generated = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
-  doc.font('Helvetica-Bold').fontSize(15).fillColor(PDF_COLORS.head).text(co.name, left, drawCompanyLogo(doc, left, 28, 200), { width });
+  doc.font('Helvetica-Bold').fontSize(15).fillColor(PDF_COLORS.head).text(co.name, left, await drawCompanyLogo(doc, left, 28, 200), { width });
   doc.font('Helvetica').fontSize(8).fillColor(PDF_COLORS.muted);
   const sub = [co.trn ? `TRN: ${co.trn}` : '', co.address, co.phone].filter(Boolean).join('  |  ');
   if (sub) doc.text(sub, { width });
@@ -341,7 +348,7 @@ h1{font-size:18px;margin:0;color:#1E3A5F}h2{font-size:14px;margin:6px 0 2px}.m{c
 table{border-collapse:collapse;width:100%;margin-top:12px}th{background:#1E3A5F;color:#fff;padding:5px 6px;font-size:10px}
 td{padding:4px 6px;border-bottom:1px solid #E5E7EB}tbody tr:nth-child(even){background:#F8FAFC}tfoot td{font-weight:bold;background:#E2E8F0;border-top:2px solid #1E3A5F}
 @media print{body{margin:8mm}@page{size:${inp.columns.length > 6 ? 'A4 landscape' : 'A4'};margin:8mm}thead{display:table-header-group}tr{page-break-inside:avoid}}
-</style></head><body><img src="${companyLogoDataUri()}" alt="Fortune 7" style="display:block;width:220px;height:auto;margin-bottom:6px" /><h1>${esc(co.name)}</h1><div class="m">${esc([co.trn ? 'TRN: ' + co.trn : '', co.address].filter(Boolean).join(' | '))}</div>
+</style></head><body><img src="${await companyLogoDataUri()}" alt="Company logo" style="display:block;width:220px;height:auto;margin-bottom:6px" /><h1>${esc(co.name)}</h1><div class="m">${esc([co.trn ? 'TRN: ' + co.trn : '', co.address].filter(Boolean).join(' | '))}</div>
 <h2>${esc(inp.title)}</h2>${inp.subtitle ? `<div class="m">${esc(inp.subtitle)}</div>` : ''}<div class="m">${esc(paramLine(inp.params))}</div>
 <table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody>${tot}</table><div class="m" style="margin-top:10px">Generated ${new Date().toISOString().replace('T', ' ').slice(0, 16)}</div></body></html>`;
 }

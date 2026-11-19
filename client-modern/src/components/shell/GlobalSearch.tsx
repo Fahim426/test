@@ -1,3 +1,4 @@
+import { useFeatures } from '@/hooks/useFeatures';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
@@ -62,6 +63,7 @@ export function openPartLookup(n: string) {
 
 /** Topbar search trigger: opens the command palette (Ctrl/Cmd+K is registered by the palette itself). */
 export function GlobalSearch() {
+  const features = useFeatures();
   const setOpen = useUi((s) => s.setPaletteOpen);
   const mac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
   return (

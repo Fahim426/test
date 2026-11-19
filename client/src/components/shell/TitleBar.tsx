@@ -1,3 +1,4 @@
+import { CompanyLogo } from '@/components/CompanyLogo';
 import { ReminderBell } from './ReminderBell';
 import { DemoBadge } from './DemoBadge';
 import { useEffect, useRef, useState } from 'react';
@@ -26,8 +27,8 @@ export function TitleBar() {
   return (
     <div className="no-print relative z-40 flex h-9 shrink-0 items-center gap-4 bg-brand px-3 text-white">
       <div className="flex min-w-[200px] items-center gap-2">
-        <img src="/brand/fortune7-logo.jpeg" alt="Fortune 7" className="h-7 w-[76px] shrink-0 rounded-sm bg-white object-contain" />
-        <span className="truncate text-[13px] font-semibold tracking-wide">{company.data?.name ?? 'Fortune 7 ERP'}</span>
+        <CompanyLogo className="h-7 w-[76px]" />
+        <span className="truncate text-[13px] font-semibold tracking-wide">{company.data?.name ?? 'Business ERP'}</span>
         <DemoBadge />
       </div>
       <div className="flex flex-1 justify-center">

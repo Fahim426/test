@@ -1,3 +1,4 @@
+import { useFeatures, screenEnabled, moduleEnabled } from '@/hooks/useFeatures';
 import { useEffect } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { ribbonConfig, locateScreen, RibbonItem } from '@/ribbon/ribbonConfig';
@@ -13,6 +14,7 @@ function useActiveScreen() {
 
 /** HOME | FINANCE | INVENTORY | ... module tabs with icons. Follows the active workspace tab. */
 export function ModuleTabs() {
+  const features = useFeatures();
   const activeModule = useUi((s) => s.activeModule);
   const setModule = useUi((s) => s.setModule);
   const ribbonCollapsed = useUi((s) => s.ribbonCollapsed);
@@ -30,7 +32,7 @@ export function ModuleTabs() {
 
   return (
     <nav className="no-print flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Modules">
-      {ribbonConfig.map((m) => {
+      {ribbonConfig.filter(m=>moduleEnabled(m.key,features)).map((m) => {
         const Icon = MODULE_ICONS[m.key];
         const on = activeModule === m.key;
         return (
@@ -84,12 +86,13 @@ function MenuButton({ item, active, onPick }: { item: RibbonItem; active: boolea
 
 /** Ribbon-style strip: grouped icon buttons of the selected module. */
 export function MenuStrip() {
+  const features = useFeatures();
   const activeModule = useUi((s) => s.activeModule);
   const collapsed = useUi((s) => s.ribbonCollapsed);
   const toggleRibbon = useUi((s) => s.toggleRibbon);
   const open = useWorkspaceStore((s) => s.open);
   const activeScreen = useActiveScreen();
-  const mod = ribbonConfig.find((m) => m.key === activeModule) ?? ribbonConfig[0];
+  const mod = ribbonConfig.find((m) => m.key === activeModule && moduleEnabled(m.key,features)) ?? ribbonConfig[0];
 
   if (collapsed)
     return (
@@ -106,7 +109,7 @@ export function MenuStrip() {
         {mod.groups.map((g, gi) => (
           <div key={g.label} className={cn('flex shrink-0 flex-col px-1.5', gi > 0 && 'border-l border-line')}>
             <div className="flex flex-1 items-start gap-0.5">
-              {g.items.map((it) => (
+              {g.items.filter(it=>screenEnabled(it.id,features)).map((it) => (
                 <MenuButton key={it.id} item={it} active={activeScreen === it.id} onPick={() => open({ screenId: it.id, title: getScreen(it.id)?.title ?? it.label })} />
               ))}
             </div>

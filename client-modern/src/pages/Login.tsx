@@ -1,3 +1,5 @@
+import { CompanyLogo } from '@/components/CompanyLogo';
+import { useProductConfig } from '@/hooks/useProductConfig';
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -21,6 +23,7 @@ const features = [
 ];
 
 export default function Login() {
+  const { config } = useProductConfig();
   const token = useAuth((s) => s.accessToken);
   const login = useAuth((s) => s.login);
   const nav = useNavigate();
@@ -59,18 +62,18 @@ export default function Login() {
           <div className="absolute right-32 top-52 h-12 w-12 -rotate-12 rounded-2xl border border-white/20 bg-white/10" />
         </div>
         <div className="relative flex items-center gap-3">
-          <img src="/brand/fortune7-logo.jpeg" alt="Fortune 7" className="h-16 w-44 shrink-0 rounded-xl bg-white object-contain" />
+          <CompanyLogo className="h-16 w-40" />
           <div className="leading-tight">
-            <div className="text-lg font-semibold tracking-tight">Fortune 7 ERP</div>
-            <div className="text-xs text-indigo-200">Printing &amp; industrial equipment trading</div>
+            <div className="text-lg font-semibold tracking-tight">{config.company?.name || config.appName}</div>
+            <div className="text-xs text-indigo-200">Business management workspace</div>
           </div>
         </div>
         <div className="relative">
           <h2 className="max-w-md text-[40px] font-semibold leading-[1.1] tracking-tight">
-            Run your equipment business <span className="bg-gradient-to-r from-sky-300 to-violet-300 bg-clip-text text-transparent">at full speed.</span>
+            Run your business <span className="bg-gradient-to-r from-sky-300 to-violet-300 bg-clip-text text-transparent">at full speed.</span>
           </h2>
           <p className="mt-4 max-w-md text-[15px] leading-relaxed text-indigo-100/80">
-            Sales, purchasing, inventory and finance in one connected workspace - built for equipment sales and service.
+            Sales, purchasing, inventory and finance in one connected workspace - built for your business.
           </p>
           <ul className="mt-9 grid max-w-lg grid-cols-1 gap-5 sm:grid-cols-2">
             {features.map((f) => (
@@ -86,7 +89,7 @@ export default function Login() {
             ))}
           </ul>
         </div>
-        <div className="relative text-xs text-indigo-300/80">© {new Date().getFullYear()} Fortune 7. All rights reserved.</div>
+        <div className="relative text-xs text-indigo-300/80">© {new Date().getFullYear()} {config.company?.name || config.appName}. All rights reserved.</div>
       </div>
 
       {/* sign-in */}
@@ -97,8 +100,8 @@ export default function Login() {
         <div className="flex flex-1 items-center justify-center px-6 py-12">
           <div className="w-full max-w-[400px]">
             <div className="mb-8 flex items-center gap-3 lg:hidden">
-              <img src="/brand/fortune7-logo.jpeg" alt="Fortune 7" className="h-12 w-32 shrink-0 rounded-lg bg-white object-contain" />
-              <span className="text-lg font-semibold text-ink">Fortune 7 ERP</span>
+              <CompanyLogo className="h-16 w-40" />
+              <span className="text-lg font-semibold text-ink">{config.company?.name || config.appName}</span>
             </div>
 
             <div className="mb-6 flex items-center justify-between gap-3">

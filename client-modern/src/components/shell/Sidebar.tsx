@@ -1,3 +1,5 @@
+import { useFeatures, screenEnabled, moduleEnabled } from '@/hooks/useFeatures';
+import { CompanyLogo } from '@/components/CompanyLogo';
 import { useEffect, useRef, useState } from 'react';
 import { Boxes, ChevronDown, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { ribbonConfig, locateScreen, RibbonItem, RibbonModule } from '@/ribbon/ribbonConfig';
@@ -38,6 +40,7 @@ function NavItem({ item, active, onPick }: { item: RibbonItem; active: boolean; 
 
 /** groups of a module (a group with a single item of the same name is rendered as a plain item). */
 function ModuleItems({ mod, onPick, activeScreen }: { mod: RibbonModule; onPick: (it: RibbonItem) => void; activeScreen?: string }) {
+  const features = useFeatures();
   return (
     <div className="flex flex-col gap-0.5 pb-2 pl-3.5 pr-1">
       <div className="flex flex-col gap-0.5 border-l border-line pl-1.5">
@@ -46,7 +49,7 @@ function ModuleItems({ mod, onPick, activeScreen }: { mod: RibbonModule; onPick:
           return (
             <div key={g.label} className="flex flex-col gap-0.5">
               {!plain && <div className="px-3 pb-0.5 pt-2.5 text-[10.5px] font-semibold uppercase tracking-wider text-ink-faint">{g.label}</div>}
-              {g.items.map((it) => (
+              {g.items.filter(it=>screenEnabled(it.id,features)).map((it) => (
                 <NavItem key={g.label + it.id} item={it} active={activeScreen === it.id} onPick={() => onPick(it)} />
               ))}
             </div>
@@ -66,6 +69,7 @@ function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
   const scroller = useRef<HTMLDivElement>(null);
 
   // expand the module of the active screen
+  const features = useFeatures();
   const am = activeModuleKey(activeScreen);
   useEffect(() => {
     if (am && !collapsed) setModuleOpen(am, true);
@@ -90,7 +94,7 @@ function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
     return (
       <>
         <div className="flex flex-1 flex-col items-center gap-1.5 overflow-visible px-2 pt-3">
-          {ribbonConfig.map((m) => {
+          {ribbonConfig.filter(m=>moduleEnabled(m.key,features)).map((m) => {
             const Icon = MODULE_ICONS[m.key];
             const on = am === m.key;
             return (
@@ -183,6 +187,7 @@ function SidebarFooter({ collapsed }: { collapsed: boolean }) {
 }
 
 export function Sidebar() {
+  const features = useFeatures();
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const toggle = useUi((s) => s.toggleSidebar);
   const { mobileNavOpen, setMobileNavOpen } = useUi();
@@ -190,10 +195,10 @@ export function Sidebar() {
 
   const header = (isCollapsed: boolean, mobile?: boolean) => (
     <div className={cn('flex h-14 shrink-0 items-center gap-3 border-b border-line', isCollapsed ? 'justify-center px-2' : 'px-4')}>
-      <Logo />
+      <CompanyLogo className="h-9 w-16" />
       {!isCollapsed && (
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-[14px] font-semibold text-ink">{company.data?.name ?? 'Fortune 7'}</div>
+          <div className="truncate text-[14px] font-semibold text-ink">{company.data?.name ?? 'Business ERP'}</div>
           <div className="text-[11px] text-ink-faint">ERP workspace</div>
         </div>
       )}

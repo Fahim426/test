@@ -1,6 +1,8 @@
+import { useFeatures } from '@/hooks/useFeatures';
+import { useProductConfig } from '@/hooks/useProductConfig';
 import { RevisionHistory } from '@/components/doc/RevisionHistory';
-import { ProductPhoto } from '@/components/inventory/ProductPhoto';
-import { useEffect, useMemo, useState } from 'react';
+import { ProductPhoto, uploadProductPhoto } from '@/components/inventory/ProductPhoto';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FormProvider, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { Package, Plus, Save, Trash2, X, Copy } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
@@ -10,6 +12,7 @@ import { Button, Checkbox, ConfirmDialog, Field, Input, NumberInput, Select, Tab
 import { useDocument } from '@/hooks/useDocument';
 import { useOpenScreen, useWorkspace } from '@/store/workspace';
 import { usePermission } from '@/store/auth';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiError } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { toast } from '@/store/toast';
@@ -161,6 +164,7 @@ function toPayload(v: PForm, isNew: boolean) {
 
 /* ----------------------------------- LIST ----------------------------------- */
 function ProductsScreen() {
+  const features = useFeatures();
   const open = useOpenScreen();
   const can = usePermission();
   const brands = useOptions('/brands');
@@ -196,7 +200,7 @@ function ProductsScreen() {
     <DataTable<ProductRow>
       tableKey="products"
       url="/products"
-      columns={columns}
+      columns={columns.filter(c => (features.productImages || c.key !== 'photo') && (features.partNumbers || c.key !== 'oemNumber'))}
       exportName="Products"
       defaultSort={{ key: 'code', dir: 'asc' }}
       searchPlaceholder="Search code / manufacturer part / alternate / barcode / name / equipment / brand..."
@@ -228,9 +232,11 @@ const td = 'grid-td p-0';
 const cellInput = '!h-8 !border-transparent hover:!border-line focus:!border-brand';
 
 function ProductForm({ params, tabId }: ScreenProps) {
+  const features = useFeatures();
   const ws = useWorkspace();
   const open = useOpenScreen();
   const can = usePermission();
+  const { config } = useProductConfig();
   const doc = useDocument<ProductDoc>('/products', params.id, { tabId, titleOf: (d) => d.code });
   const brands = useOptions('/brands');
   const catRows = useMasterRows('/categories');
@@ -240,6 +246,10 @@ function ProductForm({ params, tabId }: ScreenProps) {
   const suppliers = useOptions('/suppliers');
   const warehouses = useOptions('/warehouses');
   const [confirmDel, setConfirmDel] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [savingPhoto, setSavingPhoto] = useState(false);
+  const savingProduct = useRef(false);
+  const photoCache = useQueryClient();
 
   const values = useMemo(() => (doc.data ? toForm(doc.data) : undefined), [doc.data]);
   const form = useForm<PForm>({ values, defaultValues: EMPTY });
@@ -250,7 +260,7 @@ function ProductForm({ params, tabId }: ScreenProps) {
   const subCategoryId = useWatch({ control, name: 'subCategoryId' });
   const oemVal = useWatch({ control, name: 'oemNumber' });
 
-  useEffect(() => ws.setDirty(tabId, formState.isDirty), [formState.isDirty]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => ws.setDirty(tabId, formState.isDirty || !!pendingPhoto), [formState.isDirty, pendingPhoto, doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const catOptions = (catRows.data ?? []).filter((c) => !c.parentId).map((c) => ({ value: c.id, label: c.name ?? c.code ?? String(c.id) }));
   const subOptions = (catRows.data ?? []).filter((c) => c.parentId && String(c.parentId) === categoryId).map((c) => ({ value: c.id, label: c.name ?? c.code ?? String(c.id) }));
@@ -259,11 +269,29 @@ function ProductForm({ params, tabId }: ScreenProps) {
   const editable = doc.isNew ? can('products', 'create') : can('products', 'edit');
   const submit = handleSubmit(
     async (v) => {
+      if (savingProduct.current) return;
       if (!v.name.trim()) return toast.warning('Product name is required');
+      savingProduct.current = true;
       try {
-        await doc.save(toPayload(v, doc.isNew));
+        const payload = toPayload(v, doc.isNew);
+        if (!features.partNumbers) { delete (payload as any).partNumbers; delete (payload as any).oemNumber; }
+        if (!features.vehicleCompatibility) delete (payload as any).vehicles;
+        const saved = await doc.save(payload);
+        if (pendingPhoto) {
+          setSavingPhoto(true);
+          try {
+            await uploadProductPhoto(saved.id, pendingPhoto);
+            await photoCache.invalidateQueries({ queryKey: ['product-photo', saved.id] });
+            setPendingPhoto(null);
+          } catch (error) {
+            toast.error('Product saved, but the photo upload failed. Use Retry photo upload. ' + apiError(error));
+          }
+        }
       } catch {
         /* toast shown by hook */
+      } finally {
+        savingProduct.current = false;
+        setSavingPhoto(false);
       }
     },
   );
@@ -318,7 +346,7 @@ function ProductForm({ params, tabId }: ScreenProps) {
   return (
     <FormProvider {...form}>
       <DocumentLayout
-        title="Product"
+        title={config.productLabel}
         icon={Package}
         docNo={d?.code}
         status={d ? (d.isActive ? 'ACTIVE' : 'INACTIVE') : undefined}
@@ -326,12 +354,12 @@ function ProductForm({ params, tabId }: ScreenProps) {
         error={doc.error}
         actions={
           <>
-            <DocAction icon={Save} variant="primary" hidden={!editable} loading={doc.saving} onClick={submit}>Save</DocAction>
+            <DocAction icon={Save} variant="primary" hidden={!editable} loading={doc.saving || savingPhoto} onClick={submit}>Save</DocAction>
             <DocAction icon={Copy} hidden={doc.isNew} onClick={() => ws.duplicate(tabId)}>Duplicate</DocAction>
             <DocAction icon={Trash2} variant="danger" hidden={doc.isNew || !can('products', 'delete')} onClick={() => setConfirmDel(true)}>Delete</DocAction>
             <DocActionSep />
             <DocAction hidden={doc.isNew} onClick={() => open('stock-ledger', { productId: d?.id, productLabel: `${d?.code} - ${d?.name}` })}>Stock Ledger</DocAction>
-            <DocAction hidden={doc.isNew} onClick={() => open('part-lookup', { number: d?.oemNumber ?? d?.code })}>Part Lookup</DocAction>
+            <DocAction hidden={doc.isNew || !features.partNumbers} onClick={() => open('part-lookup', { number: d?.oemNumber ?? d?.code })}>Part Lookup</DocAction>
             {d && (
               <span className="ml-auto text-[13px] text-ink-muted">
                 On hand <b className={d.lowStock ? 'text-danger' : ''}>{fmt.qty(d.onHand)}</b> · Reserved <b>{fmt.qty(d.reserved)}</b> · Available <b>{fmt.qty(d.available)}</b> · Value <b>{fmt.money(d.stockValue)}</b>
@@ -348,7 +376,7 @@ function ProductForm({ params, tabId }: ScreenProps) {
                 label: 'General',
                 content: (
                   <HeaderSection title="General" columns={4} className="border-0">
-                    <div className="col-span-full"><ProductPhoto productId={d?.id} name={d?.name} editable={!ro} large /></div>
+                    {features.productImages && <div className="col-span-full"><ProductPhoto productId={d?.id} name={d?.name} editable={!ro && can('products', 'edit')} selectedFile={pendingPhoto} onSelectFile={setPendingPhoto} disabled={doc.saving || savingPhoto} large /></div>}
                     <Field label="Code" hint={doc.isNew ? 'Leave blank to auto-generate' : undefined}><Input {...register('code')} readOnly={!doc.isNew} placeholder="(auto)" /></Field>
                     <Field label="Name" required className="col-span-2" error={err('name')}><Input {...register('name', { required: 'Name required' })} readOnly={ro} /></Field>
                     <Field label="Arabic Name"><Input dir="rtl" {...register('arabicName')} readOnly={ro} /></Field>
@@ -368,6 +396,7 @@ function ProductForm({ params, tabId }: ScreenProps) {
               {
                 key: 'parts',
                 label: `Part Numbers (${pn.fields.length + (oemVal ? 1 : 0)})`,
+                hidden: !features.partNumbers,
                 content: (
                   <div className="p-3">
                     <div className="mb-2 grid grid-cols-4 gap-3">
@@ -392,7 +421,8 @@ function ProductForm({ params, tabId }: ScreenProps) {
               },
               {
                 key: 'vehicles',
-                label: `Equipment Compatibility (${vh.fields.length})`,
+                label: `${config.compatibilityLabel} (${vh.fields.length})`,
+                hidden: !features.vehicleCompatibility,
                 content: (
                   <div className="overflow-auto p-3">
                     <table className="w-full min-w-[900px] border-collapse text-[13px]">

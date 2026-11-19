@@ -1,3 +1,4 @@
+import { useFeatures, screenEnabled } from '@/hooks/useFeatures';
 import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CornerDownLeft, FilePlus2, History, Loader2, ScanSearch, Search } from 'lucide-react';
 import { useUi } from '@/store/ui';
@@ -64,6 +65,7 @@ export function CommandPalette() {
 
   const close = () => setOpen(false);
 
+  const features = useFeatures();
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
     const term = q.trim().toLowerCase();
@@ -79,7 +81,7 @@ export function CommandPalette() {
       for (const t of [...tabs].reverse()) recent.push({ screenId: t.screenId, title: t.title, params: t.params });
       for (const c of closed) recent.push({ screenId: c.screenId, title: c.title, params: c.params });
       const seen = new Set<string>();
-      for (const r of recent) {
+      for (const r of recent.filter(r=>screenEnabled(r.screenId,features))) {
         const k = r.screenId + JSON.stringify(r.params);
         if (seen.has(k) || seen.size >= 5) continue;
         seen.add(k);
@@ -96,27 +98,27 @@ export function CommandPalette() {
       }
       for (const a of quick.slice(0, 8))
         out.push({ key: 'q' + a.form, section: 'Quick create', label: a.label, hint: a.group, icon: FilePlus2, run: () => { openTab({ screenId: a.form, title: a.label }); close(); } });
-      for (const e of navEntries)
+      for (const e of navEntries.filter(e=>screenEnabled(e.id,features)))
         out.push({ key: 'n' + e.id, section: 'Go to', label: e.label, hint: `${titleCase(e.module)} › ${e.group}`, icon: e.icon, run: goScreen(e.id, e.label) });
       return out;
     }
 
     const scr = navEntries
-      .map((e) => ({ e, s: Math.max(score(e.label, term), score(`${e.group} ${e.label}`, term) - 5, score(e.module, term) - 30) }))
+      .filter(e=>screenEnabled(e.id,features)).map((e) => ({ e, s: Math.max(score(e.label, term), score(`${e.group} ${e.label}`, term) - 5, score(e.module, term) - 30) }))
       .filter((x) => x.s >= 60)
       .sort((a, b) => b.s - a.s)
       .slice(0, 8);
     for (const { e } of scr) out.push({ key: 'n' + e.id, section: 'Screens', label: e.label, hint: `${titleCase(e.module)} › ${e.group}`, icon: e.icon, run: goScreen(e.id, e.label) });
     for (const a of quick.filter((a) => score(a.label, term) > 0).slice(0, 4))
       out.push({ key: 'q' + a.form, section: 'Quick create', label: a.label, hint: a.group, icon: FilePlus2, run: () => { openTab({ screenId: a.form, title: a.label }); close(); } });
-    out.push({ key: 'part', section: 'Part lookup', label: <>Lookup part number <b>{q.trim()}</b></>, icon: ScanSearch, run: () => { openPartLookup(q.trim()); close(); } });
+    if(features.partNumbers) out.push({ key: 'part', section: 'Part lookup', label: <>Lookup part number <b>{q.trim()}</b></>, icon: ScanSearch, run: () => { openPartLookup(q.trim()); close(); } });
     if (debounced)
       for (const g of groups)
         for (const it of g.items.slice(0, 6))
           out.push({ key: `s${g.type}${it.id}`, section: g.label, label: it.label, icon: FileText, run: () => { openSearchItem(it); close(); } });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, tabs, closed, groups, debounced]);
+  }, [q, tabs, closed, groups, debounced, features]);
 
   useEffect(() => setHi(0), [q, groups]);
   useEffect(() => {
@@ -139,7 +141,7 @@ export function CommandPalette() {
       if (!v) return rows[hi]?.run();
       // an exact product hit -> part lookup, else the highlighted row (default: part lookup)
       const exact = groups.flatMap((g) => g.items).find((i) => i.type === 'PRODUCT' && (i.no?.toLowerCase() === v.toLowerCase() || String(i.extra?.matchedPartNumber ?? '').toLowerCase() === v.toLowerCase() || String(i.extra?.oemNumber ?? '').toLowerCase() === v.toLowerCase()));
-      if (exact) {
+      if (exact && features.partNumbers) {
         openPartLookup(v);
         close();
       } else rows[hi]?.run();

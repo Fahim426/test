@@ -1,3 +1,4 @@
+import { useOpenScreen } from '@/store/workspace';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Mail, MessageSquare, Plus, RotateCcw, Save, Settings, Trash2 } from 'lucide-react';
@@ -27,6 +28,7 @@ function SystemSettingsScreen({ tabId }: ScreenProps) {
   const can = usePermission();
   const qc = useQueryClient();
   const ws = useWorkspace();
+  const open = useOpenScreen();
   const canEdit = can('settings', 'edit');
   const [vals, setVals] = useState<Values>({});
   const [orig, setOrig] = useState<Values>({});
@@ -65,6 +67,7 @@ function SystemSettingsScreen({ tabId }: ScreenProps) {
     },
     onSuccess: (d) => {
       toast.success('Settings saved');
+      qc.invalidateQueries({queryKey:['product-config']});
       setVals({ ...d });
       setOrig({ ...d });
       qc.setQueryData(['admin', 'settings', 'all'], d);
@@ -100,6 +103,7 @@ function SystemSettingsScreen({ tabId }: ScreenProps) {
   return (
     <div className="flex h-full flex-col">
       <Toolbar>
+        <Button onClick={()=>open('company-configuration')}>Company &amp; Modules</Button>
         {canEdit && (
           <>
             <Button variant="primary" icon={Save} disabled={!dirty} loading={save.isPending} onClick={() => save.mutate()}>Save</Button>

@@ -1,3 +1,4 @@
+import { readProductConfig } from './product-config';
 import { drawCompanyLogo } from './report-brand';
 import { drawInvoicePhotoTable } from './products-invoice-table';
 import { prisma } from '../lib/prisma';
@@ -207,12 +208,13 @@ async function build(type: DocType, id: number): Promise<DocModel> {
 export async function renderDocumentPdf(type: DocType, id: number): Promise<{ buffer: Buffer; filename: string }> {
   const [co, m] = await Promise.all([companyInfo(), build(type, id)]);
   const { doc, done } = newDoc(false);
-  doc.info.Producer = 'Fortune 7 ERP';
+  doc.info.Producer = co.name;
+  const config = await readProductConfig();
   const left = 36;
   const width = doc.page.width - 72;
 
   // header: company (left) / title (right)
-  doc.font('Helvetica-Bold').fontSize(16).fillColor(PDF_COLORS.head).text(co.name, left, drawCompanyLogo(doc, left, 28, 220), { width: width * 0.52 });
+  doc.font('Helvetica-Bold').fontSize(16).fillColor(PDF_COLORS.head).text(co.name, left, await drawCompanyLogo(doc, left, 28, 220), { width: width * 0.52 });
   doc.font('Helvetica').fontSize(8).fillColor(PDF_COLORS.muted);
   const addr = [co.address, co.phone ? `Tel: ${co.phone}` : '', co.email].filter(Boolean).join('\n');
   if (addr) doc.text(addr, { width: width * 0.52 });
@@ -246,7 +248,7 @@ export async function renderDocumentPdf(type: DocType, id: number): Promise<{ bu
 
   // lines
   const body = m.lines;
-  if (m.productIds) await drawInvoicePhotoTable(doc, m.columns, body, m.productIds, y);
+  if (m.productIds && config.features.productImages) await drawInvoicePhotoTable(doc, m.columns, body, m.productIds, y);
   else drawTable(doc, m.columns, body, { fontSize: 8, startY: y, onNewPage: () => doc.page.margins.top });
   let ty = doc.y + 10;
 
