@@ -100,7 +100,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         void _drop;
         set({
           tabs: rest,
-          activeId: activeId === id ? (rest[idx] ?? rest[idx - 1] ?? null)?.id ?? null : activeId,
+          activeId: activeId === id ? ((rest[idx] ?? rest[idx - 1] ?? null)?.id ?? null) : activeId,
           closed: [{ ...snap, dirty: false }, ...get().closed].slice(0, MAX_CLOSED),
         });
       },
@@ -108,15 +108,27 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       closeOthers: (id) => {
         const { tabs } = get();
         const keep = tabs.filter((t) => t.id === id || t.pinned);
-        const gone = tabs.filter((t) => !keep.includes(t)).map(({ id: _i, dirty: _d, ...s }) => ({ ...s, dirty: false }));
+        const gone = tabs
+          .filter((t) => !keep.includes(t))
+          .map(({ id: _i, dirty: _d, ...s }) => ({ ...s, dirty: false }));
         set({ tabs: keep, activeId: id, closed: [...gone, ...get().closed].slice(0, MAX_CLOSED) });
       },
 
       closeAll: () => {
-        const { tabs } = get();
-        const keep = tabs.filter((t) => t.pinned);
-        const gone = tabs.filter((t) => !t.pinned).map(({ id: _i, dirty: _d, ...s }) => ({ ...s, dirty: false }));
-        set({ tabs: keep, activeId: keep[0]?.id ?? null, closed: [...gone, ...get().closed].slice(0, MAX_CLOSED) });
+        const { tabs, closed } = get();
+        if (!tabs.length) return;
+        const pinned = tabs.filter((t) => t.pinned).length;
+        const dirty = tabs.filter((t) => t.dirty).length;
+        const details = [
+          'Close all ' + tabs.length + ' open tabs' + (pinned ? ', including ' + pinned + ' pinned tab(s)' : '') + '?',
+          dirty ? dirty + ' tab(s) have unsaved changes. These changes will be discarded.' : '',
+          'Saved business records will not be deleted.',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+        if (!window.confirm(details)) return;
+        const gone = [...tabs].reverse().map(({ id: _id, dirty: _dirty, ...tab }) => ({ ...tab, dirty: false }));
+        set({ tabs: [], activeId: null, closed: [...gone, ...closed].slice(0, MAX_CLOSED) });
       },
 
       reopenLast: () => {
@@ -126,8 +138,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         get().open({ screenId: last.screenId, title: last.title, params: last.params, instanceKey: last.instanceKey });
       },
 
-      togglePin: (id) => set((s) => ({ tabs: sortPinned(s.tabs.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t))) })),
-      refresh: (id) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, refreshKey: t.refreshKey + 1 } : t)) })),
+      togglePin: (id) =>
+        set((s) => ({ tabs: sortPinned(s.tabs.map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t))) })),
+      refresh: (id) =>
+        set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, refreshKey: t.refreshKey + 1 } : t)) })),
 
       duplicate: (id) => {
         const t = get().tabs.find((x) => x.id === id);
@@ -146,7 +160,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       retarget: (id, p) =>
         set((s) => ({
           tabs: s.tabs.map((t) =>
-            t.id === id ? { ...t, instanceKey: `${t.screenId}:${p.id}`, params: { ...t.params, id: p.id, copyFrom: undefined }, title: p.title ?? t.title, dirty: false } : t,
+            t.id === id
+              ? {
+                  ...t,
+                  instanceKey: `${t.screenId}:${p.id}`,
+                  params: { ...t.params, id: p.id, copyFrom: undefined },
+                  title: p.title ?? t.title,
+                  dirty: false,
+                }
+              : t,
           ),
         })),
       move: (from, to) =>
@@ -160,7 +182,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     {
       name: 'ss-workspace',
       version: 1,
-      partialize: (s) => ({ tabs: s.tabs.map((t) => ({ ...t, dirty: false })), activeId: s.activeId, closed: s.closed }),
+      partialize: (s) => ({
+        tabs: s.tabs.map((t) => ({ ...t, dirty: false })),
+        activeId: s.activeId,
+        closed: s.closed,
+      }),
     },
   ),
 );

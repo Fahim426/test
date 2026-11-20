@@ -1,3 +1,8 @@
+import { QuickCreate } from './QuickCreate';
+import { Search } from 'lucide-react';
+import { useUi } from '@/store/ui';
+import { TreeControls } from './TreeNavigation';
+import { startTour, startSalesFlowTour } from '@/lib/tour';
 import { CompanyLogo } from '@/components/CompanyLogo';
 import { ReminderBell } from './ReminderBell';
 import { DemoBadge } from './DemoBadge';
@@ -10,6 +15,7 @@ import { GlobalSearch } from './GlobalSearch';
 import { ChangePasswordModal } from './ChangePassword';
 
 export function TitleBar() {
+  const {paletteOpen,setPaletteOpen}=useUi();
   const user = useAuth((s) => s.user);
   const logout = useAuth((s) => s.logout);
   const company = useCompany();
@@ -26,19 +32,20 @@ export function TitleBar() {
 
   return (
     <div className="no-print relative z-40 flex h-9 shrink-0 items-center gap-4 bg-brand px-3 text-white">
-      <div className="flex min-w-[200px] items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <CompanyLogo className="h-7 w-[76px]" />
-        <span className="truncate text-[13px] font-semibold tracking-wide">{company.data?.name ?? 'Business ERP'}</span>
+        <span className="hidden sm:block truncate text-[13px] font-semibold tracking-wide">{company.data?.name ?? 'Business ERP'}</span>
         <DemoBadge />
       </div>
-      <div className="flex flex-1 justify-center">
-        <GlobalSearch />
+      <div className="hidden sm:flex flex-1 justify-center">
+        <div data-tour="search" className="w-full"><GlobalSearch /></div>
       </div>
-      <ReminderBell />
-      <div ref={ref} className="relative min-w-[200px] text-right">
-        <button onClick={() => setMenu((m) => !m)} className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[12px] hover:bg-brand-dark">
+      <button type="button" data-tour="search-icon" aria-label="Search" className="sm:hidden" onClick={()=>setPaletteOpen(!paletteOpen)}><Search size={17}/></button><QuickCreate /><TreeControls /><ReminderBell />
+      {paletteOpen&&<div data-tour="mobile-search" className="fixed left-2 right-2 top-10 rounded border bg-white p-3 text-gray-900 sm:hidden"><GlobalSearch /><button onClick={()=>setPaletteOpen(false)}>Close search</button></div>}
+      <div ref={ref} className="relative ml-auto shrink-0 text-right">
+        <button data-tour="user" aria-label="Profile menu" onClick={() => setMenu((m) => !m)} className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[12px] hover:bg-brand-dark">
           <UserCircle2 size={16} />
-          <span className="text-left leading-3">
+          <span className="hidden sm:block text-left leading-3">
             <span className="block">{user?.fullName ?? user?.username}</span>
             <span className="block text-[10px] opacity-75">{user?.role}</span>
           </span>
@@ -46,6 +53,9 @@ export function TitleBar() {
         </button>
         {menu && (
           <div className="absolute right-0 top-9 w-[180px] border border-slate-400 bg-white py-0.5 text-left text-[12px] text-slate-800 shadow-lg">
+            <button onClick={()=>{setMenu(false);startTour();}} className="block w-full px-3 py-2 text-left">Take the product tour</button>
+            <button onClick={()=>{setMenu(false);startSalesFlowTour();}} className="block w-full px-3 py-2 text-left">Sales flow walkthrough</button>
+            <a className="block px-3 py-2" href={import.meta.env.VITE_MODERN_URL||'http://localhost:5174'}>Switch to Modern UI</a>
             <button
               className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-brand-light"
               onClick={() => {

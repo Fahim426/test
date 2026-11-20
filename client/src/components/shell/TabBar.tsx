@@ -1,5 +1,5 @@
 import { MouseEvent, useEffect, useRef, useState } from 'react';
-import { Pin, RotateCcw, Star, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { XCircle, Pin, RotateCcw, Star, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Tab, useWorkspaceStore } from '@/store/workspace';
 import { getScreen } from '@/screens/registry';
 import { useFavorites, encodeRoute } from '@/hooks/useFavorites';
@@ -139,6 +139,7 @@ export function TabBar() {
         <ChevronRight size={14} />
       </button>
       <div className="flex h-7 items-center gap-0.5 border-l border-app-border px-1.5">
+        <button type="button" disabled={tabs.length === 0} onClick={() => useWorkspaceStore.getState().closeAll()} title="Close all tabs" aria-label="Close all tabs" className="rounded p-1 text-slate-500 hover:bg-slate-200 disabled:opacity-40"><XCircle size={14} /></button>
         <button
           disabled={!active}
           onClick={() =>

@@ -53,7 +53,7 @@ export function Workspace() {
         const allowed = screenEnabled(t.screenId, features) && (!def?.permission || hasPermission(perms, ...(def.permission.includes(':') ? (def.permission.split(':') as [string, string]) : ([def.permission, 'view'] as [string, string]))));
         const props = { params: t.params, tabId: t.id, instanceKey: t.instanceKey };
         return (
-          <div key={`${t.id}:${t.refreshKey}`} className={cn('absolute inset-0 overflow-auto', t.id === activeId ? 'block' : 'hidden')}>
+          <div data-tour={'screen-'+t.screenId} key={`${t.id}:${t.refreshKey}`} className={cn('absolute inset-0 overflow-auto', t.id === activeId ? 'block' : 'hidden')}>
             <ErrorBoundary label={t.screenId}>
               {!allowed ? (
                 <EmptyState title={screenEnabled(t.screenId, features) ? "Access denied" : "Feature switched off"} hint={screenEnabled(t.screenId, features) ? `You do not have permission to open ${def?.title ?? t.screenId}.` : "Enable this feature under Admin > Company & Modules."} />

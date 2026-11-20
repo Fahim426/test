@@ -1,3 +1,6 @@
+import { TreeNavigation } from './TreeNavigation';
+import { TourBootstrap } from './TourBootstrap';
+import { useUi } from '@/store/ui';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, AuthUser } from '@/store/auth';
@@ -10,6 +13,7 @@ import { Breadcrumb, Workspace } from './Workspace';
 import { StatusBar } from './StatusBar';
 
 export default function Shell() {
+  const treeMenu = useUi(s=>s.treeMenu);
   const token = useAuth((s) => s.accessToken);
   const nav = useNavigate();
 
@@ -32,7 +36,8 @@ export default function Shell() {
     const h = (e: KeyboardEvent) => {
       const ws = useWorkspaceStore.getState();
       const k = e.key.toLowerCase();
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === 't') {
+      if ((e.ctrlKey || e.metaKey) && k === 'k' && window.innerWidth < 640) {e.preventDefault();useUi.getState().setPaletteOpen(true);requestAnimationFrame(()=>document.querySelector<HTMLInputElement>('[data-tour="mobile-search"] input')?.focus());}
+      else if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === 't') {
         e.preventDefault();
         ws.reopenLast();
       } else if (((e.ctrlKey || e.metaKey) && !e.shiftKey && k === 'w') || (e.altKey && k === 'w')) {
@@ -52,10 +57,13 @@ export default function Shell() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <TitleBar />
-      <Ribbon />
-      <TabBar />
+      {!treeMenu && <div data-tour="ribbon"><Ribbon /></div>}
+      <div className="flex min-h-0 flex-1"><TreeNavigation /><div className="flex min-w-0 flex-1 flex-col">
+      <div data-tour="tabs" className="shrink-0"><TabBar /></div>
       <Breadcrumb />
       <Workspace />
+      </div></div>
+      <TourBootstrap />
       <StatusBar />
     </div>
   );

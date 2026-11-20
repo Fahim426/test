@@ -4,6 +4,8 @@ import { persist } from 'zustand/middleware';
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 interface UiState {
+  treeMenu:boolean;
+  toggleTreeMenu:()=>void;
   activeModule: string;
   ribbonCollapsed: boolean;
   setModule: (m: string) => void;
@@ -29,6 +31,8 @@ interface UiState {
 export const useUi = create<UiState>()(
   persist(
     (set) => ({
+      treeMenu:true,
+      toggleTreeMenu:()=>set(s=>({treeMenu:!s.treeMenu,mobileNavOpen:false})),
       activeModule: 'home',
       ribbonCollapsed: false,
       setModule: (activeModule) => set({ activeModule }),
@@ -38,7 +42,7 @@ export const useUi = create<UiState>()(
       sidebarCollapsed: false,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
-      openModules: { home: true },
+      openModules: {},
       toggleModuleOpen: (id) => set((s) => ({ openModules: { ...s.openModules, [id]: !s.openModules[id] } })),
       setModuleOpen: (id, open) => set((s) => ({ openModules: { ...s.openModules, [id]: open } })),
       density: 'comfortable',
@@ -50,7 +54,9 @@ export const useUi = create<UiState>()(
     }),
     {
       name: 'ss-ui',
+      merge: (saved, current) => {const state=(saved??{}) as Partial<UiState>;return {...current,...state,openModules:state.treeMenu===undefined?{}:state.openModules??{}};},
       partialize: (s) => ({
+        treeMenu:s.treeMenu,
         activeModule: s.activeModule,
         ribbonCollapsed: s.ribbonCollapsed,
         theme: s.theme,

@@ -103,7 +103,7 @@ export function Ribbon() {
 
   return (
     <div ref={ref} className="no-print relative z-30 shrink-0">
-      <div className="flex h-7 items-end border-b border-app-border bg-app-head pl-1">
+      <div data-tour="modules" className="flex h-7 items-end border-b border-app-border bg-app-head pl-1">
         {visibleModules.map((m) => {
           const on = m.key === activeModule;
           return (

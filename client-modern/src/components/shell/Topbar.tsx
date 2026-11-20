@@ -1,3 +1,5 @@
+import { TreeControls } from './TreeNavigation';
+import { startTour, startSalesFlowTour } from '@/lib/tour';
 import { CompanyLogo } from '@/components/CompanyLogo';
 import { ReminderBell } from './ReminderBell';
 import { DemoBadge } from './DemoBadge';
@@ -158,7 +160,7 @@ function UserMenu() {
       <Menu
         width={248}
         trigger={({ toggle }) => (
-          <button onClick={toggle} className="flex items-center gap-2 rounded-full p-0.5 pr-2 transition hover:bg-surface-3">
+          <button data-tour="user" aria-label="Profile menu" onClick={toggle} className="flex items-center gap-2 rounded-full p-0.5 pr-2 transition hover:bg-surface-3">
             <Avatar name={user?.fullName ?? user?.username} />
             <span className="hidden text-left leading-tight 2xl:block">
               <span className="block max-w-[150px] truncate text-[13px] font-medium text-ink">{user?.fullName ?? user?.username}</span>
@@ -178,6 +180,8 @@ function UserMenu() {
               </div>
             </div>
             <MenuSep />
+            <MenuItem onClick={()=>{close();startTour();}}>Take the product tour</MenuItem>
+            <MenuItem onClick={()=>{close();startSalesFlowTour();}}>Sales flow walkthrough</MenuItem>
             <MenuItem icon={KeyRound} onClick={() => { close(); setPw(true); }}>Change password</MenuItem>
             <a href={CLASSIC_URL} className="menu-item" onClick={close}>
               <ExternalLink size={15} className="shrink-0 text-ink-faint" /> <span className="flex-1">Switch to Classic UI</span>
@@ -202,10 +206,10 @@ function UserMenu() {
 }
 
 export function Topbar() {
-  const { setPaletteOpen } = useUi();
+  const { setPaletteOpen, treeMenu } = useUi();
   const company = useCompany();
   return (
-    <header className="no-print sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface/90 px-4 backdrop-blur-md">
+    <header className="no-print sticky top-0 z-20 flex h-14 shrink-0 items-center gap-1 sm:gap-3 border-b border-line bg-surface/90 px-2 sm:px-4 backdrop-blur-md">
       <div className="flex shrink-0 items-center gap-2.5">
         <CompanyLogo className="h-9 w-[92px]" />
         <div className="hidden leading-tight xl:block">
@@ -215,16 +219,16 @@ export function Topbar() {
       </div>
       <span className="hidden h-6 w-px bg-line md:block" />
       <div className="min-w-0 flex-1 overflow-hidden">
-        <ModuleTabs />
+        {!treeMenu && <div data-tour="modules"><ModuleTabs /></div>}
       </div>
       <div className="hidden w-[300px] shrink-0 min-[1800px]:block">
-        <GlobalSearch />
+        <div data-tour="search"><GlobalSearch /></div>
       </div>
-      <button onClick={() => setPaletteOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-3 min-[1800px]:hidden" aria-label="Search">
+      <button data-tour="search-icon" onClick={() => setPaletteOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-3 min-[1800px]:hidden" aria-label="Search">
         <Search size={17} />
       </button>
-      <NewMenu />
-      <div className="flex items-center gap-0.5">
+      <TreeControls /><div data-tour="new" className="hidden sm:block"><NewMenu /></div>
+      <div className="hidden sm:flex items-center gap-0.5">
         <ReminderBell />
       <Approvals />
         <ThemeMenu />
