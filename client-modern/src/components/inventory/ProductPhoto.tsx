@@ -54,7 +54,7 @@ export function ProductPhoto({ productId, name = 'Product', editable = false, la
     if (!productId) onSelectFile?.(chosen);
     else { onSelectFile?.(chosen); void upload(chosen); }
   };
-  return <div className={large ? 'flex items-center gap-4 py-2' : 'flex items-center justify-center'}>
+  return <div data-tour={large?'demo-product-photo':undefined} className={large ? 'flex items-center gap-4 py-2' : 'flex items-center justify-center'}>
     <div className={large ? 'flex h-36 w-52 shrink-0 items-center justify-center rounded border border-gray-200 bg-white' : 'flex h-12 w-16 items-center justify-center rounded border border-gray-200 bg-white'}>
       {url ? <img src={url} alt={name} className="h-full w-full rounded object-contain" /> : <ImageIcon size={large ? 32 : 18} className="text-gray-400" aria-label={photo.isError ? 'Photo unavailable' : 'No product photo'} />}
     </div>

@@ -1,3 +1,4 @@
+import { startClientDemo } from '@/lib/clientDemo';
 import { TreeControls } from './TreeNavigation';
 import { startTour, startSalesFlowTour } from '@/lib/tour';
 import { CompanyLogo } from '@/components/CompanyLogo';
@@ -181,6 +182,7 @@ function UserMenu() {
             </div>
             <MenuSep />
             <MenuItem onClick={()=>{close();startTour();}}>Take the product tour</MenuItem>
+            <MenuItem onClick={()=>{close();void startClientDemo();}}>Client Demo</MenuItem>
             <MenuItem onClick={()=>{close();startSalesFlowTour();}}>Sales flow walkthrough</MenuItem>
             <MenuItem icon={KeyRound} onClick={() => { close(); setPw(true); }}>Change password</MenuItem>
             <a href={CLASSIC_URL} className="menu-item" onClick={close}>

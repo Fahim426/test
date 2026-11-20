@@ -13,7 +13,9 @@
     "seed": "tsx prisma/seed.ts",
     "assistant:test": "tsx src/assistant/check-intents.ts --held-out",
     "assistant:test:live": "node -r dotenv/config node_modules/tsx/dist/cli.mjs src/assistant/check-live.ts",
-    "assistant:test:http": "node -r dotenv/config node_modules/tsx/dist/cli.mjs src/assistant/check-http.ts"
+    "assistant:test:http": "node -r dotenv/config node_modules/tsx/dist/cli.mjs src/assistant/check-http.ts",
+    "assistant:test:upgrade": "tsx src/assistant/check-upgrade.ts",
+    "assistant:test:upgrade:live": "node -r dotenv/config node_modules/tsx/dist/cli.mjs src/assistant/check-upgrade-live.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",

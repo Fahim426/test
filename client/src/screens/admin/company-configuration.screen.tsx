@@ -252,7 +252,7 @@ function CompanyConfiguration({ tabId }: ScreenProps) {
               </label>
             </div>
           </section>
-          <section>
+          <section data-tour="demo-company-modules">
             <h2 className="mb-2 font-semibold">Optional modules and features</h2>
             <div className="divide-y rounded border">
               {featureOptions.map((o) => (

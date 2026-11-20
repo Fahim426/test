@@ -32,6 +32,10 @@ const escape = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 export function makeTour(steps: DriveStep[], label: string, extraConfig: Config = {}) {
   active?.destroy();
+  let restorePresentation = () => {};
+  let disposeResize = () => {};
+  let preferredPosition: { left: number; top: number } | undefined;
+  let preferredSize: { width: number; height: number } | undefined;
   const tour = driver({
     showProgress: true,
     progressText: 'Step {{current}} of {{total}}',
@@ -48,6 +52,8 @@ export function makeTour(steps: DriveStep[], label: string, extraConfig: Config 
     ...extraConfig,
     steps,
     onPopoverRender: (popover, opts) => {
+      restorePresentation();
+      disposeResize();
       const index = opts.driver.getActiveIndex() ?? 0,
         total = steps.length;
       const bar = document.createElement('div');
@@ -70,9 +76,150 @@ export function makeTour(steps: DriveStep[], label: string, extraConfig: Config 
         skip.onclick = () => opts.driver.destroy();
         popover.footer.prepend(skip);
       }
+      const minimise = document.createElement('button');
+      minimise.type = 'button';
+      minimise.className = 'ss-tour-minimise';
+      minimise.setAttribute('aria-label', 'Minimize tour');
+      minimise.title = 'Minimize to view the screen';
+      minimise.textContent = '\u2212';
+      popover.wrapper.append(minimise);
+      const miniBar = document.createElement('div');
+      miniBar.className = 'ss-tour-minibar';
+      const caption = document.createElement('span');
+      caption.textContent = label + ' · ' + (index + 1) + '/' + total;
+      caption.title = popover.title.textContent || label;
+      const resume = document.createElement('button');
+      resume.type = 'button';
+      resume.textContent = 'Restore';
+      resume.setAttribute('aria-label', 'Restore tour');
+      const leave = document.createElement('button');
+      leave.type = 'button';
+      leave.textContent = 'Exit';
+      leave.setAttribute('aria-label', 'Exit minimized tour');
+      leave.onclick = () => opts.driver.destroy();
+      miniBar.append(caption, resume, leave);
+      popover.wrapper.append(miniBar);
+      let minimized = false;
+      const keyboard = opts.driver.getConfig().allowKeyboardControl;
+      restorePresentation = () => {
+        document.body.classList.remove('ss-tour-minimized');
+        popover.wrapper.classList.remove('ss-tour-is-minimized');
+        if (minimized) opts.driver.setConfig({ ...opts.driver.getConfig(), allowKeyboardControl: keyboard });
+        minimized = false;
+      };
+      minimise.onclick = () => {
+        minimized = true;
+        opts.driver.setConfig({ ...opts.driver.getConfig(), allowKeyboardControl: false });
+        document.body.classList.add('ss-tour-minimized');
+        popover.wrapper.classList.add('ss-tour-is-minimized');
+        resume.focus();
+      };
+      resume.onclick = () => {
+        restorePresentation();
+        opts.driver.refresh();
+        minimise.focus();
+      };
       extraConfig.onPopoverRender?.(popover, opts);
+      const wrapper = popover.wrapper;
+      const events = new AbortController();
+      const resetSize = document.createElement('button');
+      resetSize.type = 'button';
+      resetSize.className = 'ss-tour-reset-size';
+      resetSize.setAttribute('aria-label', 'Reset tour box size');
+      resetSize.title = 'Reset size and position';
+      resetSize.textContent = '\u21ba';
+      wrapper.append(resetSize);
+      let frame = 0;
+      const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(v, Math.max(min, max)));
+      const applyGeometry = () => {
+        if (preferredSize) {
+          wrapper.style.setProperty('width', Math.min(preferredSize.width, window.innerWidth - 24) + 'px', 'important');
+          wrapper.style.setProperty('height', Math.min(preferredSize.height, window.innerHeight - 24) + 'px', 'important');
+          wrapper.style.setProperty('max-width', 'calc(100vw - 24px)', 'important');
+          wrapper.style.setProperty('max-height', 'calc(100dvh - 24px)', 'important');
+        } else {
+          for (const key of ['width', 'height', 'max-width', 'max-height']) wrapper.style.removeProperty(key);
+        }
+        wrapper.classList.toggle('ss-tour-positioned', !!preferredPosition);
+        if (preferredPosition) {
+          const rect = wrapper.getBoundingClientRect();
+          wrapper.style.setProperty('--ss-tour-left', clamp(preferredPosition.left, 12, window.innerWidth - rect.width - 12) + 'px');
+          wrapper.style.setProperty('--ss-tour-top', clamp(preferredPosition.top, 12, window.innerHeight - rect.height - 12) + 'px');
+        }
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          if (!minimized && opts.driver.isActive()) opts.driver.refresh();
+        });
+      };
+      type Drag = { x: number; y: number; rect: DOMRect; direction: string };
+      let drag: Drag | undefined;
+      const begin = (event: PointerEvent, control: HTMLElement, direction: string) => {
+        if (event.button !== 0 || minimized) return;
+        event.preventDefault();
+        control.focus();
+        drag = { x: event.clientX, y: event.clientY, rect: wrapper.getBoundingClientRect(), direction };
+        control.setPointerCapture(event.pointerId);
+      };
+      const adjust = (direction: string, dx: number, dy: number, rect: DOMRect) => {
+        let { left, top, right, bottom } = rect;
+        if (direction === 'move') {
+          preferredPosition = { left: clamp(left + dx, 12, window.innerWidth - rect.width - 12), top: clamp(top + dy, 12, window.innerHeight - rect.height - 12) };
+        } else {
+          const minWidth = Math.min(300, window.innerWidth - 24);
+          const minHeight = Math.min(360, window.innerHeight - 24);
+          if (direction.includes('e')) right = clamp(right + dx, left + minWidth, window.innerWidth - 12);
+          if (direction.includes('w')) left = clamp(left + dx, 12, right - minWidth);
+          if (direction.includes('s')) bottom = clamp(bottom + dy, top + minHeight, window.innerHeight - 12);
+          if (direction.includes('n')) top = clamp(top + dy, 12, bottom - minHeight);
+          preferredSize = { width: right - left, height: bottom - top };
+          preferredPosition = { left, top };
+        }
+        applyGeometry();
+      };
+      const connect = (control: HTMLElement, direction: string) => {
+        control.addEventListener('pointerdown', (event) => begin(event, control, direction), { signal: events.signal });
+        control.addEventListener('pointermove', (event) => {
+          if (drag) adjust(drag.direction, event.clientX - drag.x, event.clientY - drag.y, drag.rect);
+        }, { signal: events.signal });
+        for (const name of ['pointerup', 'pointercancel', 'lostpointercapture'])
+          control.addEventListener(name, () => { drag = undefined; }, { signal: events.signal });
+        control.addEventListener('keydown', (event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+          event.preventDefault(); event.stopPropagation();
+          adjust(direction, event.key === 'ArrowRight' ? 24 : event.key === 'ArrowLeft' ? -24 : 0,
+            event.key === 'ArrowDown' ? 24 : event.key === 'ArrowUp' ? -24 : 0, wrapper.getBoundingClientRect());
+        }, { signal: events.signal });
+        control.addEventListener('keyup', (event) => { if (event.key.startsWith('Arrow')) event.stopPropagation(); }, { signal: events.signal });
+      };
+      eyebrow.tabIndex = 0;
+      eyebrow.setAttribute('role', 'button');
+      eyebrow.setAttribute('aria-label', 'Move tour box');
+      eyebrow.title = 'Drag to move, or use arrow keys when focused';
+      eyebrow.classList.add('ss-tour-move');
+      connect(eyebrow, 'move');
+      popover.title.classList.add('ss-tour-move');
+      connect(popover.title, 'move');
+      const names: Record<string, string> = { n: 'top', ne: 'top-right', e: 'right', se: 'bottom-right', s: 'bottom', sw: 'bottom-left', w: 'left', nw: 'top-left' };
+      for (const [direction, name] of Object.entries(names)) {
+        const handle = document.createElement('button');
+        handle.type = 'button';
+        handle.className = 'ss-tour-edge ss-tour-edge-' + direction;
+        handle.setAttribute('aria-label', direction === 'se' ? 'Resize tour box' : 'Resize tour box from ' + name);
+        handle.title = 'Drag to resize from ' + name;
+        if (direction === 'se') handle.textContent = '\u25e2';
+        wrapper.append(handle);
+        connect(handle, direction);
+      }
+      resume.onclick = () => { restorePresentation(); applyGeometry(); minimise.focus(); };
+      resetSize.onclick = () => { preferredSize = undefined; preferredPosition = undefined; applyGeometry(); };
+      window.addEventListener('resize', applyGeometry, { signal: events.signal });
+      applyGeometry();
+      disposeResize = () => { events.abort(); cancelAnimationFrame(frame); drag = undefined; };
+
     },
     onDestroyed: (el, step, opts) => {
+      restorePresentation();
+      disposeResize();
       seen();
       if (active === tour) active = undefined;
       extraConfig.onDestroyed?.(el, step, opts);

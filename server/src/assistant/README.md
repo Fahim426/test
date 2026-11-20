@@ -32,7 +32,7 @@ Available through the floating chat button in Classic and Modern. This is a fini
 | employee_lookup | One employee's permitted directory information |
 | audit_history | Audit events for one visible record, including recorded before/after values |
 
-Examples: `sales this month`, `and last month?`, `purchases in Dubai this year`, `show purchase invoices`, `stock for GX-15300`, `top five customers`, `customer dues above 50k`, `AMCs expiring next month`, `who edited SI-2026-00005`.
+Examples: `sales this month`, `sales last month`, `purchases in Dubai this year`, `show purchase invoices`, `stock for GX-15300`, `top five customers`, `customer dues above 50k`, `AMCs expiring next month`, `who edited SI-2026-00005`.
 
 ## Interface
 
@@ -40,19 +40,26 @@ One authenticated route: `POST /api/assistant/message` (the application mounts t
 
 ```json
 {
-  "message": "and last month?",
-  "context": { "awaiting": {}, "screenId": "optional-current-screen" },
-  "memory": { "intent": "sales_summary", "entities": {} }
+  "message": "gross profit for GX-15300 in Dubai this month",
+  "context": { "screenId": "product-form" }
 }
 ```
 
-Omit `awaiting` when no clarification is pending; send back the exact returned object when present. All incoming fields, including memory and choices, are validated and rechecked against current access. Responses contain `intent`, `text`, and optional `table`, `link`, `chips`, `awaiting`, `memory`, `responseId`. Table targets open the existing workspace screen and highlight the matching document/row. The component keeps memory in this conversation only and clears it on identity/access changes.
+Each new question is independent. The browser does not send conversation memory and the endpoint rejects a supplied memory field. A short clarification state (context.awaiting) may be returned/sent only to complete an ambiguous or incomplete question; all IDs, choices, permissions and branches are rechecked. No complete chat history is sent or stored as model context. The UI keeps up to 50 messages locally while open and clears them on identity/access changes.
+
+Responses contain intent, text, optional table/link/chips/awaiting/responseId, and details: branch, period, filters, source records and calculation basis. The assistant keeps its existing 25 parameterised read-only data handlers. Product gross-profit report links carry the branch, dates, product/customer and grouping, clearing unrelated saved report filters. Source notes disclose exclusions, current snapshots, default windows and row limits.
+
+Screen-specific suggestions use the same endpoint (message: help with context.screenId), are filtered by current role and enabled modules, and are cached briefly in the UI. The screen is only a suggestion hint; it never overrides query permission or branch scope.
+
+Twelve fixed workflow guides cover quotations, purchasing, goods receipts, sales orders, picking, packing, delivery, sales/supplier invoices, customer receipts, AMC and serial tracking. Try "How do I create a quotation?". Guide buttons open list screens only. Exact help templates permit explanation of create/post workflows; direct commands and combined action requests remain refused. Guide links are checked again against the client screen registry, feature switches and role permissions.
+
+Service costs/profit are explicitly unavailable: current AMC fees and visit notes are insufficient to calculate complete labour, travel and parts costs. Missing costs are never estimated from contract fees.
 
 Feedback uses the same endpoint with an empty message and `context.feedback: { responseId, rating: "up" | "down" }`. Response ownership is checked.
 
 ## Processing and security
 
-Normalisation, accents, typo correction, synonyms and number words precede entity extraction. Real visible names/codes resolve entities; ambiguous names or numeric document references produce choices. TF-IDF cosine matching uses eight examples per intent, core-word gates, a minimum score and runner-up margin. Follow-ups merge validated entities into a previous intent. Exactly one fixed parameterised SELECT handler runs for a resolved intent; separate read-only record indexing supports name matching. No user text becomes SQL code. No assistant handler writes business tables.
+Normalisation, accents, typo correction, synonyms and number words precede entity extraction. Real visible names/codes resolve entities; ambiguous names or numeric document references produce choices. TF-IDF cosine matching uses eight examples per intent, core-word gates, a minimum score and runner-up margin. Follow-up memory is disabled at the public endpoint; the legacy language-layer follow-up regression checks remain for the parser only. Exactly one fixed parameterised SELECT handler runs for a resolved intent; separate read-only record indexing supports name matching. No user text becomes SQL code. No assistant handler writes business tables.
 
 Each intent checks existing role/module permissions. An assigned branch always limits results, including for an assigned Admin. Only a global Admin can query all branches. Other users without an assigned branch are refused until an administrator assigns one. Shared product catalogue and branch names are lookup metadata; transactions and employee/customer/supplier records remain scoped. Branch-specific AMC access requires an explicit unit registry/AMC branch link; unlinked contracts are visible only to a global Admin. Audit queries also enforce the underlying record permission and visibility. Broad navigation links are omitted where existing destination screens cannot guarantee the same scope.
 
@@ -72,10 +79,12 @@ Run from `server`:
 npm run assistant:test
 npm run assistant:test:live
 npm run assistant:test:http
+npm run assistant:test:upgrade
+npm run assistant:test:upgrade:live
 npm run typecheck
 ```
 
-Live tests require the existing local demo database. HTTP tests require the running local API and demo logins; they deliberately test the rate limit. They compare business data before and after. Browser checks exercised both frontends: conversation follow-ups, ambiguity choices, document navigation, feedback, minimise/maximise, reset, HR privacy and no outside requests. Both frontend production builds were checked.
+Live tests require the existing local demo database. HTTP tests require the running local API and demo logins; they deliberately test the rate limit. They compare business data before and after. Browser checks exercised both frontends: standalone questions, ambiguity choices, document navigation, feedback, minimise/maximise, reset, HR privacy and no outside requests. Both frontend production builds were checked.
 
 Results: 200/200 tuned examples, 26/26 entity checks, all follow-up and clarification checks. Fifty fresh phrases first scored 35/50 (70%); vocabulary fixes brought those regression cases to 50/50. A separate subsequently held-out positive set first scored 49/50 (98%). That single positive miss was not tuned. Ten held-out negatives initially scored 8/10; creation-command and prediction refusals were corrected, and all ten now pass, with nine additional safety regressions. These are locally authored test sets, not an independent production accuracy estimate. Later numeric-document disambiguation, inclusive amount filtering and safety fixes are documented in evaluation metadata.
 
@@ -83,4 +92,10 @@ Results: 200/200 tuned examples, 26/26 entity checks, all follow-up and clarific
 
 ## Removal and layout
 
-All backend implementation and tests are in this folder, with one auto-discovered mount in `server/src/modules/assistant.ts`. Each independently built frontend has one `components/AssistantChat.tsx` and a single import/render in its `App.tsx`. To remove, remove those imports/renders, the two components, the mount, this folder and the three assistant package scripts. No schema migration or new dependency was added. The referenced external assistant repository was unavailable; the supplied design was followed in this repository's TypeScript/Express/Prisma/React stack.
+All backend implementation and tests are in this folder, with one auto-discovered mount in `server/src/modules/assistant.ts`. Each independently built frontend has one `components/AssistantChat.tsx` and a single import/render in its `App.tsx`. To remove, remove those imports/renders, the two components, the mount, this folder and the assistant package scripts. No schema migration or new dependency was added. The referenced external assistant repository was unavailable; the supplied design was followed in this repository's TypeScript/Express/Prisma/React stack.
+
+## Standalone assistant upgrade verification (20 November 2026)
+
+The upgrade adds no dependency, model, external API, database schema or business writes. Normal process memory is still used for rules, bounded caches, feedback references and the visible chat; no zero-RAM claim is made. Existing feedback and unknown-question logs support manual vocabulary improvements, not automatic learning. Review logs under the same access/retention rules as other ERP logs.
+
+50 new locally authored language/guide/safety cases pass. The first development run was 32/50 because a question-mark normalisation bug prevented guide matching; upgrade-first-result.json retains that result. After the punctuation/plural fix, upgrade cases are regression tests, not held-out evidence. The separate existing held-out positive set remains 49/50 (98%), with the known reorder-shortage miss unchanged. Live tests cover all 25 data intents, 12 guides, current branch/role boundaries, disabled memory, safe clarification, truthful service-cost limitations and full business-data hashes. HTTP checks cover authentication, rate limits, strict input validation, feedback ownership and logging. Browser checks exercise both independent frontends, screen suggestions, workflow links, branch/product/date report presets, serial ownership, renewals, feedback, mobile layout and zero conversation-memory or business-write requests.

@@ -1,0 +1,133 @@
+{
+  "passed": 32,
+  "total": 50,
+  "failures": [
+    {
+      "kind": "guide",
+      "message": "How do I create a quotation?",
+      "intent": "guide_quotation",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How can we prepare a sales quote?",
+      "intent": "guide_quotation",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "What comes after a quotation?",
+      "intent": "guide_quotation",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do I create a purchase order?",
+      "intent": "guide_purchase",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How to record a goods receipt?",
+      "intent": "guide_goods_receipt",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "What happens after a GRN?",
+      "intent": "guide_goods_receipt",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do we make a sales order?",
+      "intent": "guide_sales_order",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do I create a picking list?",
+      "intent": "guide_picking",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do I create a packing list?",
+      "intent": "guide_packing",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "What happens after packing?",
+      "intent": "guide_packing",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do I create a delivery note?",
+      "intent": "guide_delivery",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "Where can I open delivery notes?",
+      "intent": "guide_delivery",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do I create an invoice?",
+      "intent": "guide_invoice",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How can we record a supplier invoice?",
+      "intent": "guide_purchase_invoice",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do I record a customer receipt?",
+      "intent": "guide_receipt",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do I create an AMC contract?",
+      "intent": "guide_amc",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How to manage a maintenance contract?",
+      "intent": "guide_amc",
+      "actual": null,
+      "pass": false
+    },
+    {
+      "kind": "guide",
+      "message": "How do I track a serial number?",
+      "intent": "guide_serial",
+      "actual": null,
+      "pass": false
+    }
+  ],
+  "note": "Fresh locally authored phrasings, first measured before vocabulary fixes. Not an independent production accuracy estimate."
+}

@@ -1,3 +1,4 @@
+import { startClientDemo } from '@/lib/clientDemo';
 import { QuickCreate } from './QuickCreate';
 import { Search } from 'lucide-react';
 import { useUi } from '@/store/ui';
@@ -54,6 +55,7 @@ export function TitleBar() {
         {menu && (
           <div className="absolute right-0 top-9 w-[180px] border border-slate-400 bg-white py-0.5 text-left text-[12px] text-slate-800 shadow-lg">
             <button onClick={()=>{setMenu(false);startTour();}} className="block w-full px-3 py-2 text-left">Take the product tour</button>
+            <button onClick={()=>{setMenu(false);void startClientDemo();}} className="block w-full px-3 py-2 text-left">Client Demo</button>
             <button onClick={()=>{setMenu(false);startSalesFlowTour();}} className="block w-full px-3 py-2 text-left">Sales flow walkthrough</button>
             <a className="block px-3 py-2" href={import.meta.env.VITE_MODERN_URL||'http://localhost:5174'}>Switch to Modern UI</a>
             <button

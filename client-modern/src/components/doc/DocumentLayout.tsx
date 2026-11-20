@@ -154,7 +154,7 @@ const cardCls = 'rounded-card border border-line bg-surface shadow-card';
 export function HeaderSection({ title, children, columns = 4, right, className }: { title: string; children: ReactNode; columns?: 2 | 3 | 4 | 5 | 6; right?: ReactNode; className?: string }) {
   const gap = 16;
   return (
-    <section className={cn(cardCls, className)}>
+    <section data-tour={'demo-section-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-')} className={cn(cardCls, className)}>
       <SectionHeader title={title} right={right} className="px-5 pt-4" />
       <div
         className="grid gap-x-4 gap-y-4 p-5 pt-4"
@@ -169,7 +169,7 @@ export function HeaderSection({ title, children, columns = 4, right, className }
 /** A plain titled card containing arbitrary content (items grid, terms, ...). */
 export function DocSection({ title, children, right, className, bodyClassName }: { title: string; children: ReactNode; right?: ReactNode; className?: string; bodyClassName?: string }) {
   return (
-    <section className={cn(cardCls, className)}>
+    <section data-tour={'demo-section-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-')} className={cn(cardCls, className)}>
       <SectionHeader title={title} right={right} className="px-5 pt-4" />
       <div className={cn('p-3', bodyClassName)}>{children}</div>
     </section>
@@ -194,7 +194,7 @@ export function TotalsSection({
     </div>
   );
   return (
-    <section className={cn(cardCls, 'ml-auto w-full max-w-[400px] overflow-hidden', className)}>
+    <section data-tour="demo-document-totals" className={cn(cardCls, 'ml-auto w-full max-w-[400px] overflow-hidden', className)}>
       <div className="px-5 pb-1 pt-4">
         <Row l="Subtotal" v={fmt.money(totals.subtotal)} />
         <Row l="Discount" v={fmt.money(totals.discount)} />

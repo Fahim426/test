@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-20",
+  "newRegression": {
+    "passed": 50,
+    "total": 50,
+    "firstDevelopmentRun": 32,
+    "note": "First run failed 18 question-mark guide templates; preserved in upgrade-first-result.json. Fixed regression cases are not held out."
+  },
+  "existingHeldOut": {
+    "passed": 49,
+    "total": 50,
+    "percent": 98,
+    "knownMiss": "show the reorder shortage report"
+  },
+  "followupMemory": "disabled at public API; browser sends no memory",
+  "businessWrites": false,
+  "newDependencies": [],
+  "guides": 12,
+  "dataIntents": 25
+}

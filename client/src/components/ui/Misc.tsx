@@ -80,7 +80,7 @@ export function Tabs({ tabs, initial, className }: { tabs: TabDef[]; initial?: s
       <div className="flex border-b border-app-border bg-app-head">
         {visible.map((t) => (
           <button
-            key={t.key}
+            data-tour={'document-tab-'+t.key} key={t.key}
             type="button"
             onClick={() => setActive(t.key)}
             className={cn(

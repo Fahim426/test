@@ -66,7 +66,7 @@ export const DocActionSep = () => <span className="mx-1 h-5 w-px bg-app-border" 
 export function HeaderSection({ title, children, columns = 4, right, className }: { title: string; children: ReactNode; columns?: 2 | 3 | 4 | 5 | 6; right?: ReactNode; className?: string }) {
   const cols = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5', 6: 'grid-cols-6' }[columns];
   return (
-    <section className={cn('border border-app-border bg-white', className)}>
+    <section data-tour={'demo-section-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-')} className={cn('border border-app-border bg-white', className)}>
       <SectionHeader title={title} right={right} className="border-x-0 border-t-0" />
       <div className={cn('grid gap-x-3 gap-y-2 p-3', cols)}>{children}</div>
     </section>
@@ -76,7 +76,7 @@ export function HeaderSection({ title, children, columns = 4, right, className }
 /** A plain titled section containing arbitrary content (items grid, terms, ...). */
 export function DocSection({ title, children, right, className, bodyClassName }: { title: string; children: ReactNode; right?: ReactNode; className?: string; bodyClassName?: string }) {
   return (
-    <section className={cn('border border-app-border bg-white', className)}>
+    <section data-tour={'demo-section-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-')} className={cn('border border-app-border bg-white', className)}>
       <SectionHeader title={title} right={right} className="border-x-0 border-t-0" />
       <div className={cn('p-2', bodyClassName)}>{children}</div>
     </section>
@@ -101,7 +101,7 @@ export function TotalsSection({
     </div>
   );
   return (
-    <section className={cn('border border-app-border bg-white', className)}>
+    <section data-tour="demo-document-totals" className={cn('border border-app-border bg-white', className)}>
       <SectionHeader title="Totals" className="border-x-0 border-t-0" />
       <div className="flex justify-end p-3">
         <div className="w-[300px]">
