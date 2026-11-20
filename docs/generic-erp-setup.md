@@ -56,6 +56,4 @@ For a new optional module, add a key/default, strict validation, UI option, scre
 ## Verified in the demo
 
 - `cd server; node scripts/verify-product-config.cjs`: configuration permissions, validation, route guards (including case variants), assistant module restrictions, custom logo/report rendering and safe refusal to initialise an existing database. The test restores the original company/settings.
-- `.local-run/test-product-config-ui.cjs`: both Classic and Modern controls, unsaved preset behavior, hidden product fields/photos, restored-tab blocking and reversible AMC/assistant access.
-- `.local-run/test-fresh-customer.cjs`: creates its own empty QA schema, runs generic setup, checks no business/demo records exist and verifies a second run is refused; then removes its QA database. It requires local DBA credentials and is a development-only test.
 - Server typecheck, both frontend builds and existing assistant language/live checks.
