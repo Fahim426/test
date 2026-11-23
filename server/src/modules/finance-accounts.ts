@@ -180,6 +180,8 @@ const lineSchema = z.object({
   partyType: z.enum(['CUSTOMER', 'SUPPLIER']).optional().nullable(),
   partyId: z.number().int().optional().nullable(),
   description: z.string().optional().nullable(),
+  /** Business Unit of this line (admin: inter-BU transfers); default: the journal's BU */
+  buId: z.number().int().positive().optional().nullable(),
 });
 const journalSchema = z.object({
   date: z.coerce.date(),
@@ -274,6 +276,7 @@ journals.post(
             partyType: l.partyType ?? undefined,
             partyId: l.partyId ?? undefined,
             description: l.description ?? undefined,
+            buId: l.buId ?? undefined,
           })),
         });
         await audit(tx, req.user, 'POST', 'JournalEntry', row.id, { entryNo: row.entryNo, totalDebit: num(row.totalDebit) });

@@ -12,9 +12,11 @@ import { linkDocs } from '../services/docLink';
 import {
   buildListWhere, lineIn, prepareLines, resolveRate, mustCustomer, mustFound, mustStatus, approvalFor, docLinks, availabilityFor, num, r3, LineIn,
 } from '../services/sales-common';
+import { syncParentsMiddleware, syncSourceStatus, takePending } from '../services/pending';
 import type { ModuleDef } from '../app';
 
 const router = Router();
+router.use('/:id', syncParentsMiddleware('SALES_QUOTATION'));
 
 const bodySchema = z.object({
   docDate: z.coerce.date().optional(),
@@ -213,7 +215,7 @@ enquiryConv.post('/:id/create-quotation', can('sales_quotation', 'create'), ah(a
   const over = z.object({ warehouseId: z.coerce.number().int().optional(), validUntil: z.coerce.date().optional(), priceType: z.enum(['RETAIL', 'WHOLESALE']).optional(), paymentTerms: z.string().optional() }).parse(req.body ?? {});
   const qId = await prisma.$transaction(async (tx) => {
     const e = mustFound(await tx.salesEnquiry.findUnique({ where: { id }, include: { items: true } }), 'Sales enquiry');
-    mustStatus(e, ['OPEN', 'QUOTED'], 'create quotation');
+    mustStatus(e, ['OPEN', 'QUOTED', 'PARTIALLY_QUOTED'], 'create quotation');
     const missing = e.items.filter((i) => !i.productId);
     if (missing.length) throw badRequest(`Enquiry lines without a product cannot be quoted: ${missing.map((m) => m.description ?? `#${m.id}`).join(', ')}. Edit the enquiry and select products.`);
     const cust = await mustCustomer(tx, e.customerId);
@@ -222,10 +224,11 @@ enquiryConv.post('/:id/create-quotation', can('sales_quotation', 'create'), ah(a
     const q = await createQuotationTx(tx, req.user, {
       customerId: e.customerId, salesmanId: e.salesmanId, enquiryId: e.id, warehouseId: over.warehouseId ?? null, validUntil,
       priceType: over.priceType, paymentTerms: terms ?? null, remarks: e.remarks ?? undefined,
-      items: e.items.map((i) => ({ productId: i.productId!, qty: num(i.qty), description: i.description ?? undefined })),
+      items: await takePending(tx, 'SE_SQ', id, e.items, (i, qty) => ({ productId: i.productId!, qty, description: i.description ?? undefined }), `enquiry ${e.docNo}`),
     });
     await linkDocs(tx, { type: 'SALES_ENQUIRY', id: e.id, no: e.docNo }, { type: 'SALES_QUOTATION', id: q.id, no: q.docNo });
     await tx.salesEnquiry.update({ where: { id }, data: { status: 'QUOTED' } });
+    await syncSourceStatus(tx, 'SALES_ENQUIRY', id);
     await audit(tx, req.user, 'CREATE_QUOTATION', 'SalesEnquiry', id, { quotation: q.docNo });
     return q.id;
   }, { timeout: 30000 });

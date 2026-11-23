@@ -9,6 +9,8 @@ import { badRequest, notFound } from '../lib/errors';
 import { customerBalance } from '../services/accounting';
 import { nextCode, dimensionMaps } from '../services/admin-master';
 import { num, r2 } from '../lib/calc';
+import { linkedLedger } from '../services/party-heads';
+import { recordOpeningVisible } from '../lib/bu';
 import type { ModuleDef } from '../app';
 
 const PERM = 'customers';
@@ -19,6 +21,21 @@ const opt = z
   .nullish()
   .transform((v) => (v === '' ? null : v));
 const optId = z.coerce.number().int().positive().nullish();
+/** website: blank -> null, "example.com" -> "https://example.com" */
+export const webUrl = z
+  .string()
+  .trim()
+  .max(300)
+  .nullish()
+  .transform((v) => (v ? (/^https?:\/\//i.test(v) ? v : `https://${v}`) : null));
+/** optional image as a data URL (resized in the browser before upload) */
+const dataImage = (max: number) =>
+  z
+    .string()
+    .max(max, 'Photo is too large')
+    .regex(/^data:image\/(png|jpe?g|webp);base64,/, 'Photo must be a PNG, JPEG or WEBP image')
+    .nullish()
+    .or(z.literal('').transform(() => null));
 
 export const customerSchema = z.object({
   code: z.string().trim().max(40).optional(),
@@ -34,6 +51,9 @@ export const customerSchema = z.object({
     .email()
     .nullish()
     .or(z.literal('').transform(() => null)),
+  website: webUrl,
+  photo: dataImage(3_000_000),
+  photoThumb: dataImage(200_000),
   address: opt,
   city: opt,
   country: opt,
@@ -52,7 +72,7 @@ async function decorate<T extends { id: number; paymentTermId: number | null; sa
   const m = await dimensionMaps();
   const balances = new Map<number, number>();
   if (withBalance && rows.length) {
-    const ar = await prisma.account.findUnique({ where: { systemKey: 'AR' } });
+    const ar = await prisma.account.findFirst({ where: { systemKey: 'AR' } });
     if (ar) {
       const agg = await prisma.journalLine.groupBy({
         by: ['partyId'],
@@ -62,8 +82,9 @@ async function decorate<T extends { id: number; paymentTermId: number | null; sa
       for (const a of agg) balances.set(a.partyId!, num(a._sum.debit) - num(a._sum.credit));
     }
   }
+  const withOpening = await recordOpeningVisible(); // record opening balances belong to the default BU
   return rows.map((r) => {
-    const opening = num((r as unknown as { openingBalance: unknown }).openingBalance);
+    const opening = withOpening ? num((r as unknown as { openingBalance: unknown }).openingBalance) : 0;
     const balance = withBalance ? r2(opening + (balances.get(r.id) ?? 0)) : undefined;
     return {
       ...r,
@@ -96,7 +117,7 @@ r.get(
     const sortable = ['id', 'code', 'name', 'city', 'country', 'creditLimit', 'createdAt'];
     const sort = sortable.includes(q.sort ?? '') ? q.sort! : 'code';
     const [rows, total] = await Promise.all([
-      prisma.customer.findMany({ where, orderBy: { [sort]: q.sort ? q.dir : 'asc' }, skip: (q.page - 1) * q.pageSize, take: q.pageSize }),
+      prisma.customer.findMany({ where, orderBy: { [sort]: q.sort ? q.dir : 'asc' }, skip: (q.page - 1) * q.pageSize, take: q.pageSize, omit: { photo: true } }),
       prisma.customer.count({ where }),
     ]);
     res.json(paged(await decorate(rows), total, q));
@@ -151,6 +172,7 @@ r.get(
       totalInvoices: invAgg._count._all,
       totalSales: r2(num(invAgg._sum.baseTotal)),
       lastInvoice,
+      ledger: await linkedLedger('CUSTOMER', id, balance),
     });
   }),
 );

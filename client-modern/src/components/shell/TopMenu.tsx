@@ -31,7 +31,7 @@ export function ModuleTabs() {
   }, [screenId]);
 
   return (
-    <nav className="no-print flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Modules">
+    <nav className="no-print flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Modules" data-tour="modules">
       {ribbonConfig.filter(m=>moduleEnabled(m.key,features)).map((m) => {
         const Icon = MODULE_ICONS[m.key];
         const on = activeModule === m.key;
@@ -104,7 +104,7 @@ export function MenuStrip() {
     );
 
   return (
-    <div className="no-print relative shrink-0 border-b border-line bg-surface">
+    <div data-tour="ribbon" className="no-print relative shrink-0 border-b border-line bg-surface">
       <div className="flex items-stretch overflow-x-auto px-3 pb-1 pt-1.5 [scrollbar-width:thin]">
         {mod.groups.map((g, gi) => (
           <div key={g.label} className={cn('flex shrink-0 flex-col px-1.5', gi > 0 && 'border-l border-line')}>

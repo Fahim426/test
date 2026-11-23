@@ -16,7 +16,7 @@ import { fmt } from '@/lib/format';
 import { num } from '@/lib/calc';
 import { cn } from '@/lib/cn';
 import { AnyRec, InfoBanner, makeSalesList, openPdf, useConfirm, useSalesActions } from '@/components/sales/shared';
-import { colCustomer, colDate, colDoc, colQty, colStatus, SourcePicker } from '@/components/sales/SourcePicker';
+import { colCustomer, colDate, colDoc, colQty, SourcePicker } from '@/components/sales/SourcePicker';
 
 const URL = '/delivery-notes';
 const TYPE = 'DELIVERY_NOTE';
@@ -31,38 +31,18 @@ function NewDeliveryPicker({ open, onClose }: { open: boolean; onClose: () => vo
     <SourcePicker
       open={open}
       title="New Delivery Note - select the source"
-      hint="Delivery notes are created from an approved sales order, from a picking list (picked quantity) or from a packing list. Partial delivery is supported: edit the quantities on the draft."
+      hint="Delivery notes are created from a confirmed proforma invoice. Partial delivery is supported: edit the quantities on the draft."
       onClose={onClose}
       tabs={[
         {
-          key: 'so',
-          label: 'Sales orders',
-          url: '/sales-orders/open',
-          filter: (r) => num(r.pendingDeliveryQty) > 0 && ['APPROVED', 'PARTIALLY_DELIVERED'].includes(r.status),
-          empty: 'No approved sales orders with quantity left to deliver.',
-          columns: [colDoc('Order No', 'docNo'), colDate(), colCustomer, colQty('Pending Delivery', 'pendingDeliveryQty'), colStatus],
+          key: 'pf',
+          label: 'Confirmed proformas',
+          url: '/proforma-invoices/open',
+          filter: (r) => num(r.pendingDeliveryQty) > 0 && ['APPROVED', 'PARTIALLY_DELIVERED'].includes(r.orderStatus),
+          empty: 'No confirmed proformas with quantity left to deliver.',
+          columns: [colDoc('Proforma No', 'docNo'), colDate(), colCustomer, colQty('Pending Delivery', 'pendingDeliveryQty'), { header: 'Status', render: (r) => <StatusBadge status={r.orderStatus} /> }],
           actionLabel: 'Create Delivery',
-          onPick: async (r) => created((await api.post(`/sales-orders/${r.id}/create-delivery`, {})).data),
-        },
-        {
-          key: 'pick',
-          label: 'Picking lists',
-          url: '/picking-lists',
-          params: { status: 'PARTIALLY_PICKED,PICKED' },
-          empty: 'No picking lists with picked quantity.',
-          columns: [colDoc('Picking No', 'docNo'), colDate(), { header: 'Sales Order', render: (r) => r.salesOrder?.docNo }, { header: 'Customer', render: (r) => r.salesOrder?.customer?.name }, colQty('Picked', 'pickedQty'), colStatus],
-          actionLabel: 'Create Delivery',
-          onPick: async (r) => created((await api.post(`/picking-lists/${r.id}/create-delivery`, {})).data),
-        },
-        {
-          key: 'pack',
-          label: 'Packing lists',
-          url: '/packing-lists',
-          params: { status: 'PACKED' },
-          empty: 'No packed packing lists waiting for delivery.',
-          columns: [colDoc('Packing No', 'docNo'), colDate(), { header: 'Sales Order', render: (r) => r.salesOrder?.docNo }, colCustomer, colQty('Boxes', 'boxes'), colStatus],
-          actionLabel: 'Create Delivery',
-          onPick: async (r) => created((await api.post(`/packing-lists/${r.id}/create-delivery`, {})).data),
+          onPick: async (r) => created((await api.post(`/proforma-invoices/${r.id}/create-delivery`, {})).data),
         },
       ]}
     />
@@ -82,7 +62,7 @@ const DeliveryList = makeSalesList<AnyRec>({
   columns: [
     { key: 'docNo', header: 'Delivery No', width: 130, filter: 'text' },
     { key: 'docDate', header: 'Date', type: 'date', width: 100 },
-    { key: 'salesOrder.docNo', header: 'Sales Order', width: 130, sortable: false },
+    { key: 'proforma.docNo', header: 'Proforma', width: 130, sortable: false },
     { key: 'customer.name', header: 'Customer', sortable: false, filter: 'text' },
     { key: 'warehouse.name', header: 'Warehouse', sortable: false, hidden: true },
     { key: 'driver', header: 'Driver', sortable: false, hidden: true },
@@ -159,7 +139,7 @@ function DeliveryForm({ params, tabId }: ScreenProps) {
         <div>Post delivery note <b>{doc.data?.docNo}</b>?</div>
         <ul className="list-disc pl-4">
           <li>Physical stock decreases by <b>{fmt.qty(total)}</b> unit(s) in {doc.data?.warehouse?.name ?? 'the warehouse'} (stock transactions are created).</li>
-          <li>The sales-order reservation for these units is consumed.</li>
+          <li>The stock reserved for the proforma is used for these units.</li>
           <li>The delivery can no longer be edited (it can be cancelled to reverse the stock movement).</li>
         </ul>
       </div>,
@@ -171,14 +151,13 @@ function DeliveryForm({ params, tabId }: ScreenProps) {
   if (doc.isNew) {
     return (
       <DocumentLayout title="Delivery Note" icon={Truck}>
-        <EmptyState title="Delivery notes are created from a sales order, picking list or packing list" hint="Use Create Delivery on one of those documents, or choose the source below." action={<Button variant="primary" onClick={() => setPickerOpen(true)}>Select source</Button>} />
+        <EmptyState title="Delivery notes are created from a confirmed proforma invoice" hint="Use Create Delivery on the proforma, or choose it below." action={<Button variant="primary" onClick={() => setPickerOpen(true)}>Select source</Button>} />
         <NewDeliveryPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
       <RevisionHistory entity="DeliveryNote" id={doc.id} />
       </DocumentLayout>
     );
   }
 
-  const so = doc.data?.salesOrder;
   const link = (screen: string, d?: AnyRec | null) => (
     <button type="button" className="ctl text-left font-semibold text-brand underline" onClick={() => d && openScreen(screen, { id: d.id }, d.docNo)}>{d?.docNo ?? '-'}</button>
   );
@@ -236,14 +215,13 @@ function DeliveryForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType={TYPE} docId={doc.id} />
         {dirty && editable && <InfoBanner tone="amber">Unsaved changes. Save before posting.</InfoBanner>}
         {status === 'DRAFT' && <InfoBanner tone="blue">Posting this delivery decreases physical stock and consumes the order reservation. Adjust the delivered quantities below for a partial delivery.</InfoBanner>}
         {posted && <InfoBanner tone="green">Delivery posted: stock has been reduced{doc.data?.invoiced ? ' and the goods are fully invoiced.' : '. Not invoiced yet.'}</InfoBanner>}
         <HeaderSection title="Delivery Information" columns={4}>
           <Field label="Delivery Number"><Input value={doc.data?.docNo ?? ''} readOnly /></Field>
-          <Field label="Sales Order">{link('sales-order-form', so)}</Field>
-          <Field label="Picking List">{link('picking-form', doc.data?.picking)}</Field>
-          <Field label="Packing List">{link('packing-list-form', doc.data?.packing)}</Field>
+          <Field label="Proforma">{link('proforma-invoice-form', doc.data?.proforma)}</Field>
           <Field label="Customer"><Input value={doc.data?.customer?.name ?? ''} readOnly /></Field>
           <Field label="Warehouse"><Input value={doc.data?.warehouse?.name ?? ''} readOnly /></Field>
           <Field label="Date"><DateInput value={head.docDate} disabled={!editable} onChange={(e) => setHead({ ...head, docDate: e.target.value })} /></Field>
@@ -310,7 +288,6 @@ function DeliveryForm({ params, tabId }: ScreenProps) {
           <Field label="Remarks"><Textarea rows={2} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} /></Field>
         </DocSection>
         <AttachmentsSection docType={TYPE} docId={doc.id} />
-        <DocumentFlow docType={TYPE} docId={doc.id} />
         <AuditSection doc={doc.data} />
       <RevisionHistory entity="DeliveryNote" id={doc.id} />
       </DocumentLayout>

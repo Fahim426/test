@@ -174,6 +174,7 @@ export function LineItemsGrid({
                           <ProductPicker
                             text={lt}
                             warehouseId={warehouseId}
+                            priceMode={priceField === 'retailPrice' || priceField === 'wholesalePrice' ? 'sales' : 'purchase'}
                             disabled={!editable}
                             inputProps={{ ...common, 'aria-invalid': !!err }}
                             className={err ? '!border-danger' : ''}

@@ -27,7 +27,7 @@ router.get(
     const def = getReport(req.params.key);
     const fmt = String(req.query.format || '').toLowerCase();
     const p = toParams(req.query);
-    if (fmt === 'pdf' || fmt === 'xlsx' || fmt === 'csv') {
+    if (fmt === 'pdf' || fmt === 'xlsx' || fmt === 'csv' || fmt === 'docx') {
       await new Promise<void>((ok, bad) => can('reports', 'export')(req, res, (e?: unknown) => (e ? bad(e) : ok())));
       const result = await runReport(def.key, p, false);
       return sendFile(res, await render(inputFrom(result), fmt), `${def.key}_${new Date().toISOString().slice(0, 10)}`);

@@ -1,13 +1,10 @@
 import { startClientDemo } from '@/lib/clientDemo';
-import { TreeControls } from './TreeNavigation';
-import { startTour, startSalesFlowTour } from '@/lib/tour';
-import { CompanyLogo } from '@/components/CompanyLogo';
 import { ReminderBell } from './ReminderBell';
 import { DemoBadge } from './DemoBadge';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ChevronDown, ExternalLink, KeyRound, LogOut, Monitor, Moon, Plus, Sun, Search } from 'lucide-react';
+import { Bell, ChevronDown, KeyRound, LogOut, Monitor, Moon, Plus, Sun, Search, PanelLeft, HelpCircle, Route, ShoppingCart, Menu as MenuIcon } from 'lucide-react';
 import { useAuth, usePermission } from '@/store/auth';
 import { ThemeMode, useUi } from '@/store/ui';
 import { useWorkspaceStore } from '@/store/workspace';
@@ -15,12 +12,14 @@ import { api } from '@/lib/api';
 import { Menu, MenuItem, MenuLabel, MenuSep } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { GlobalSearch } from './GlobalSearch';
+import { BuSwitcher } from './BuSwitcher';
 import { ChangePasswordModal } from './ChangePassword';
+import { Logo } from './Sidebar';
 import { ModuleTabs } from './TopMenu';
 import { useCompany } from '@/hooks/useCompany';
 import { QUICK_GROUPS } from './nav';
+import { startTour, startSalesFlowTour, startPurchaseFlowTour } from '@/lib/tour';
 
-export const CLASSIC_URL: string = import.meta.env.VITE_CLASSIC_URL || 'http://localhost:5173';
 
 const initials = (n?: string) =>
   (n ?? '?')
@@ -46,6 +45,22 @@ const themes: { id: ThemeMode; label: string; icon: typeof Sun }[] = [
   { id: 'dark', label: 'Dark', icon: Moon },
   { id: 'system', label: 'System', icon: Monitor },
 ];
+
+function TreeMenuToggle() {
+  const on = useUi((s) => s.treeMenu);
+  const toggle = useUi((s) => s.toggleTreeMenu);
+  return (
+    <button
+      data-tour="tree-toggle"
+      onClick={toggle}
+      title={on ? 'Hide tree menu panel' : 'Show tree menu panel'}
+      aria-pressed={on}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg transition hover:bg-surface-3 ${on ? 'bg-brand-soft text-brand' : 'text-ink-muted'}`}
+    >
+      <PanelLeft size={17} />
+    </button>
+  );
+}
 
 export function ThemeMenu() {
   const { theme, setTheme } = useUi();
@@ -87,6 +102,7 @@ function NewMenu() {
       panelClassName="max-h-[70vh] overflow-y-auto"
       trigger={({ toggle, open: o }) => (
         <button
+          data-tour="new"
           onClick={toggle}
           className={cn(
             'inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3 text-[13px] font-medium text-white shadow-[0_1px_2px_rgb(var(--brand)/0.4),inset_0_1px_0_rgb(255_255_255/0.15)] transition hover:bg-brand-dark dark:text-[#0c0d14]',
@@ -161,13 +177,13 @@ function UserMenu() {
       <Menu
         width={248}
         trigger={({ toggle }) => (
-          <button data-tour="user" aria-label="Profile menu" onClick={toggle} className="flex items-center gap-2 rounded-full p-0.5 pr-2 transition hover:bg-surface-3">
+          <button data-tour="user" onClick={toggle} className="flex items-center gap-2 rounded-full p-0.5 pr-2 transition hover:bg-surface-3">
             <Avatar name={user?.fullName ?? user?.username} />
-            <span className="hidden text-left leading-tight 2xl:block">
+            <span className="hidden text-left leading-tight xl:block">
               <span className="block max-w-[150px] truncate text-[13px] font-medium text-ink">{user?.fullName ?? user?.username}</span>
               <span className="block text-[11px] text-ink-faint">{user?.role}</span>
             </span>
-            <ChevronDown size={13} className="hidden text-ink-faint 2xl:block" />
+            <ChevronDown size={13} className="hidden text-ink-faint xl:block" />
           </button>
         )}
       >
@@ -181,13 +197,12 @@ function UserMenu() {
               </div>
             </div>
             <MenuSep />
-            <MenuItem onClick={()=>{close();startTour();}}>Take the product tour</MenuItem>
-            <MenuItem onClick={()=>{close();void startClientDemo();}}>Client Demo</MenuItem>
-            <MenuItem onClick={()=>{close();startSalesFlowTour();}}>Sales flow walkthrough</MenuItem>
+            <MenuItem onClick={() => { close(); void startClientDemo(); }}>Client Demo</MenuItem>
+            <a href={import.meta.env.VITE_CLASSIC_URL || 'http://localhost:5173'} className="menu-item">Switch to Classic UI</a>
             <MenuItem icon={KeyRound} onClick={() => { close(); setPw(true); }}>Change password</MenuItem>
-            <a href={CLASSIC_URL} className="menu-item" onClick={close}>
-              <ExternalLink size={15} className="shrink-0 text-ink-faint" /> <span className="flex-1">Switch to Classic UI</span>
-            </a>
+            <MenuItem icon={HelpCircle} onClick={() => { close(); setTimeout(startTour, 150); }}>Take the product tour</MenuItem>
+            <MenuItem icon={Route} onClick={() => { close(); setTimeout(startSalesFlowTour, 150); }}>Tour: Sales flow (Enquiry → Receipt)</MenuItem>
+            <MenuItem icon={ShoppingCart} onClick={() => { close(); setTimeout(startPurchaseFlowTour, 150); }}>Tour: Purchase flow (Request → Payment)</MenuItem>
             <MenuSep />
             <MenuItem
               icon={LogOut}
@@ -208,31 +223,41 @@ function UserMenu() {
 }
 
 export function Topbar() {
-  const { setPaletteOpen, treeMenu } = useUi();
+  const { setPaletteOpen } = useUi();
+  const treeMenu = useUi((s) => s.treeMenu);
   const company = useCompany();
   return (
-    <header className="no-print sticky top-0 z-20 flex h-14 shrink-0 items-center gap-1 sm:gap-3 border-b border-line bg-surface/90 px-2 sm:px-4 backdrop-blur-md">
-      <div className="flex shrink-0 items-center gap-2.5">
-        <CompanyLogo className="h-9 w-[92px]" />
+    <header className="no-print sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface/90 px-4 backdrop-blur-md">
+      <div className={`shrink-0 items-center gap-2.5 ${treeMenu ? 'flex md:hidden' : 'flex'}`}>
+        <Logo size={32} />
         <div className="hidden leading-tight xl:block">
-          <div className="max-w-[170px] truncate text-[14px] font-semibold text-ink">{company.data?.name ?? 'Business ERP'}</div>
-          <div className="flex items-center gap-1.5 text-[11px] text-ink-faint">ERP workspace <DemoBadge /></div>
+          <div className="max-w-[170px] truncate text-[14px] font-semibold text-ink">{company.data?.name ?? 'FlixERP'}</div>
+          <div className="truncate text-[11px] text-ink-faint">{(company.data?.tagline as string | undefined) || 'ERP workspace'} <DemoBadge /></div>
         </div>
       </div>
-      <span className="hidden h-6 w-px bg-line md:block" />
+      {!treeMenu && <span className="hidden h-6 w-px bg-line md:block" />}
       <div className="min-w-0 flex-1 overflow-hidden">
-        {!treeMenu && <div data-tour="modules"><ModuleTabs /></div>}
+        {treeMenu ? (
+          <div data-tour="search" className="hidden w-full lg:block">
+            <GlobalSearch />
+          </div>
+        ) : (
+          <ModuleTabs />
+        )}
       </div>
-      <div className="hidden w-[300px] shrink-0 min-[1800px]:block">
-        <div data-tour="search"><GlobalSearch /></div>
+      <div data-tour={treeMenu ? undefined : 'search'} className={treeMenu ? 'hidden' : 'hidden w-[300px] shrink-0 2xl:block'}>
+        <GlobalSearch />
       </div>
-      <button data-tour="search-icon" onClick={() => setPaletteOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-3 min-[1800px]:hidden" aria-label="Search">
+      <button data-tour="search-icon" onClick={() => setPaletteOpen(true)} className={`flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted hover:bg-surface-3 ${treeMenu ? 'lg:hidden' : '2xl:hidden'}`} aria-label="Search">
         <Search size={17} />
       </button>
-      <TreeControls /><div data-tour="new" className="hidden sm:block"><NewMenu /></div>
-      <div className="hidden sm:flex items-center gap-0.5">
+      <button type="button" data-tour="tree-mobile-toggle" aria-label="Open navigation" onClick={() => useUi.getState().setMobileNavOpen(true)} className="rounded-lg p-2 md:hidden"><MenuIcon size={18} /></button>
+      <BuSwitcher />
+      <NewMenu />
+      <div className="flex items-center gap-0.5">
         <ReminderBell />
-      <Approvals />
+        <Approvals />
+        <TreeMenuToggle />
         <ThemeMenu />
       </div>
       <span className="hidden h-6 w-px bg-line sm:block" />
@@ -240,3 +265,5 @@ export function Topbar() {
     </header>
   );
 }
+
+export const CLASSIC_URL = import.meta.env.VITE_CLASSIC_URL || 'http://localhost:5173';

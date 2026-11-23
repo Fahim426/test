@@ -1,9 +1,10 @@
+import { BuSwitcher } from './BuSwitcher';
 import { startClientDemo } from '@/lib/clientDemo';
 import { QuickCreate } from './QuickCreate';
 import { Search } from 'lucide-react';
 import { useUi } from '@/store/ui';
 import { TreeControls } from './TreeNavigation';
-import { startTour, startSalesFlowTour } from '@/lib/tour';
+import { startTour, startSalesFlowTour, startPurchaseFlowTour } from '@/lib/tour';
 import { CompanyLogo } from '@/components/CompanyLogo';
 import { ReminderBell } from './ReminderBell';
 import { DemoBadge } from './DemoBadge';
@@ -41,7 +42,7 @@ export function TitleBar() {
       <div className="hidden sm:flex flex-1 justify-center">
         <div data-tour="search" className="w-full"><GlobalSearch /></div>
       </div>
-      <button type="button" data-tour="search-icon" aria-label="Search" className="sm:hidden" onClick={()=>setPaletteOpen(!paletteOpen)}><Search size={17}/></button><QuickCreate /><TreeControls /><ReminderBell />
+      <button type="button" data-tour="search-icon" aria-label="Search" className="sm:hidden" onClick={()=>setPaletteOpen(!paletteOpen)}><Search size={17}/></button><BuSwitcher /><QuickCreate /><TreeControls /><ReminderBell />
       {paletteOpen&&<div data-tour="mobile-search" className="fixed left-2 right-2 top-10 rounded border bg-white p-3 text-gray-900 sm:hidden"><GlobalSearch /><button onClick={()=>setPaletteOpen(false)}>Close search</button></div>}
       <div ref={ref} className="relative ml-auto shrink-0 text-right">
         <button data-tour="user" aria-label="Profile menu" onClick={() => setMenu((m) => !m)} className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-[12px] hover:bg-brand-dark">
@@ -57,6 +58,7 @@ export function TitleBar() {
             <button onClick={()=>{setMenu(false);startTour();}} className="block w-full px-3 py-2 text-left">Take the product tour</button>
             <button onClick={()=>{setMenu(false);void startClientDemo();}} className="block w-full px-3 py-2 text-left">Client Demo</button>
             <button onClick={()=>{setMenu(false);startSalesFlowTour();}} className="block w-full px-3 py-2 text-left">Sales flow walkthrough</button>
+            <button onClick={()=>{setMenu(false);startPurchaseFlowTour();}} className="block w-full px-3 py-2 text-left">Purchase flow walkthrough</button>
             <a className="block px-3 py-2" href={import.meta.env.VITE_MODERN_URL||'http://localhost:5174'}>Switch to Modern UI</a>
             <button
               className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-brand-light"

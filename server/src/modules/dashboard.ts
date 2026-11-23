@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma';
 import { num, r2 } from '../lib/calc';
 import { ModuleDef } from '../app';
 import { VALID_SALES, VALID_PURCHASE, iso, loadLookups } from '../services/report-types';
+import { recordOpeningVisible } from '../lib/bu';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -79,7 +80,7 @@ async function partyBalances(kind: 'CUSTOMER' | 'SUPPLIER') {
   for (const x of g) if (x.partyId) bal.set(x.partyId, kind === 'CUSTOMER' ? num(x._sum.debit) - num(x._sum.credit) : num(x._sum.credit) - num(x._sum.debit));
   const openings: { id: number; openingBalance: unknown }[] =
     kind === 'CUSTOMER' ? await prisma.customer.findMany({ where: { openingBalance: { not: 0 } }, select: { id: true, openingBalance: true } }) : await prisma.supplier.findMany({ where: { openingBalance: { not: 0 } }, select: { id: true, openingBalance: true } });
-  for (const o of openings) bal.set(o.id, (bal.get(o.id) ?? 0) + num(o.openingBalance));
+  if (await recordOpeningVisible()) for (const o of openings) bal.set(o.id, (bal.get(o.id) ?? 0) + num(o.openingBalance));
   return bal;
 }
 
@@ -110,7 +111,7 @@ router.get(
       pendQuot, pendPO, pendDel, pendPay, unpaidSales,
       salesTrendRows, purTrendRows, vouchers,
       topProducts, outCustInv, recent,
-      mrC, prC, rfqC, sqC, poC, grnC, piC, pvC, grnUninv, seC, qC, soC, pkC, dnC, siC, dnUninv,
+      mrC, prC, rfqC, sqC, poC, grnC, piC, pvC, grnUninv, seC, qC, pfC, dnC, siC, dnUninv,
     ] = await Promise.all([
       safe('todaySales', sumSales(today, tomorrow), { amount: 0, count: 0 }),
       safe('monthSales', sumSales(monthStart, nextMonth), { amount: 0, count: 0 }),
@@ -122,10 +123,14 @@ router.get(
       safe(
         'lowStock',
         prisma.$queryRaw<{ id: number; code: string; name: string; onHand: unknown; th: unknown; reorderLevel: unknown; minStock: unknown }[]>`
-          SELECT p.id, p.code, p.name, COALESCE(b.q,0) AS onHand, IF(p.reorderLevel>0,p.reorderLevel,p.minStock) AS th, p.reorderLevel, p.minStock
-          FROM Product p LEFT JOIN (SELECT productId, SUM(onHand) q FROM StockBalance GROUP BY productId) b ON b.productId = p.id
-          WHERE p.isActive = 1 AND IF(p.reorderLevel>0,p.reorderLevel,p.minStock) > 0 AND COALESCE(b.q,0) <= IF(p.reorderLevel>0,p.reorderLevel,p.minStock)
-          ORDER BY (IF(p.reorderLevel>0,p.reorderLevel,p.minStock) - COALESCE(b.q,0)) DESC`,
+          SELECT x.id, x.code, x.name, x.onHand, x.th, x.reorderLevel, x.minStock
+          FROM (
+            SELECT p.id, p.code, p.name, COALESCE(b.q,0) AS onHand, CASE WHEN p.reorderLevel > 0 THEN p.reorderLevel ELSE p.minStock END AS th, p.reorderLevel, p.minStock
+            FROM Product p LEFT JOIN (SELECT productId, SUM(onHand) q FROM StockBalance GROUP BY productId) b ON b.productId = p.id
+            WHERE p.isActive = 1
+          ) x
+          WHERE x.th > 0 AND x.onHand <= x.th
+          ORDER BY (x.th - x.onHand) DESC`,
         [],
       ),
       safe('pendQuot', prisma.salesQuotation.aggregate({ where: { status: { in: ['SENT', 'ACCEPTED'] } }, _count: true, _sum: { total: true } }), { _count: 0, _sum: { total: 0 } } as Any),
@@ -154,8 +159,7 @@ router.get(
       safe('grnUninv', prisma.goodsReceipt.count({ where: { status: 'POSTED', invoiced: false } }), 0),
       safe('se', statusCounts('salesEnquiry'), {}),
       safe('q', statusCounts('salesQuotation'), {}),
-      safe('so', statusCounts('salesOrder'), {}),
-      safe('pk', statusCounts('pickingList'), {}),
+      safe('pf', statusCounts('proformaInvoice'), {}),
       safe('dn', statusCounts('deliveryNote'), {}),
       safe('si', statusCounts('salesInvoice'), {}),
       safe('dnUninv', prisma.deliveryNote.count({ where: { status: 'POSTED', invoiced: false } }), 0),
@@ -215,8 +219,7 @@ router.get(
     const wfSales = [
       stage('Enquiry', 'sales_enquiry', '/sales/enquiries', seC as Any, ['OPEN']),
       stage('Quotation', 'sales_quotation', '/sales/quotations', qC as Any, ['SENT', 'ACCEPTED']),
-      stage('Order', 'sales_order', '/sales/orders', soC as Any, ['PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_DELIVERED'], 0, ['CANCELLED', 'DRAFT']),
-      stage('Picking', 'picking', '/sales/picking', pkC as Any, ['OPEN', 'PARTIALLY_PICKED']),
+      stage('Proforma', 'proforma_invoice', '/sales/proforma', pfC as Any, ['DRAFT', 'ISSUED']),
       stage('Delivery', 'delivery_note', '/sales/deliveries', dnC as Any, ['DRAFT'], dnUninv as number),
       stage('Invoice', 'sales_invoice', '/sales/invoices', siC as Any, ['DRAFT']),
       { stage: 'Receipt', key: 'receipts', route: '/finance/receipts', count: (unpaidSales as Any[]).length ? 0 : 0, pending: (unpaidSales as Any[]).length },
@@ -287,7 +290,7 @@ async function recentTransactions() {
     prisma.purchaseInvoice.findMany({ ...sel, select: { id: true, docNo: true, docDate: true, createdAt: true, supplierId: true, baseTotal: true, status: true } }),
     prisma.goodsReceipt.findMany({ ...sel, select: { id: true, docNo: true, docDate: true, createdAt: true, supplierId: true, status: true } }),
     prisma.deliveryNote.findMany({ ...sel, select: { id: true, docNo: true, docDate: true, createdAt: true, customerId: true, status: true } }),
-    prisma.salesOrder.findMany({ ...sel, select: { id: true, docNo: true, docDate: true, createdAt: true, customerId: true, total: true, status: true } }),
+    prisma.proformaInvoice.findMany({ ...sel, select: { id: true, docNo: true, docDate: true, createdAt: true, customerId: true, total: true, status: true } }),
     prisma.purchaseOrder.findMany({ ...sel, select: { id: true, docNo: true, docDate: true, createdAt: true, supplierId: true, total: true, status: true } }),
     prisma.voucher.findMany({ ...sel, select: { id: true, voucherNo: true, voucherType: true, voucherDate: true, createdAt: true, partyType: true, partyId: true, amount: true, status: true } }),
     Promise.resolve([] as Any[]),
@@ -304,7 +307,7 @@ async function recentTransactions() {
   pi.forEach((x) => rows.push({ type: 'PURCHASE_INVOICE', label: 'Purchase Invoice', id: x.id, docNo: x.docNo, date: x.docDate, createdAt: x.createdAt, party: sn(x.supplierId), amount: num(x.baseTotal), status: x.status, route: `/purchase/invoices/${x.id}` }));
   grn.forEach((x) => rows.push({ type: 'GOODS_RECEIPT', label: 'Goods Receipt', id: x.id, docNo: x.docNo, date: x.docDate, createdAt: x.createdAt, party: sn(x.supplierId), amount: null, status: x.status, route: `/purchase/receipts/${x.id}` }));
   dn.forEach((x) => rows.push({ type: 'DELIVERY_NOTE', label: 'Delivery Note', id: x.id, docNo: x.docNo, date: x.docDate, createdAt: x.createdAt, party: cn(x.customerId), amount: null, status: x.status, route: `/sales/deliveries/${x.id}` }));
-  so.forEach((x) => rows.push({ type: 'SALES_ORDER', label: 'Sales Order', id: x.id, docNo: x.docNo, date: x.docDate, createdAt: x.createdAt, party: cn(x.customerId), amount: num(x.total), status: x.status, route: `/sales/orders/${x.id}` }));
+  so.forEach((x) => rows.push({ type: 'PROFORMA_INVOICE', label: 'Proforma Invoice', id: x.id, docNo: x.docNo, date: x.docDate, createdAt: x.createdAt, party: cn(x.customerId), amount: num(x.total), status: x.status, route: `/sales/proforma/${x.id}` }));
   po.forEach((x) => rows.push({ type: 'PURCHASE_ORDER', label: 'Purchase Order', id: x.id, docNo: x.docNo, date: x.docDate, createdAt: x.createdAt, party: sn(x.supplierId), amount: num(x.total), status: x.status, route: `/purchase/orders/${x.id}` }));
   const vp = await loadLookups({ customerIds: rc.filter((v) => v.partyType === 'CUSTOMER').map((v) => v.partyId), supplierIds: rc.filter((v) => v.partyType === 'SUPPLIER').map((v) => v.partyId) });
   rc.forEach((x) => rows.push({ type: x.voucherType === 'RECEIPT' ? 'RECEIPT' : 'PAYMENT', label: x.voucherType === 'RECEIPT' ? 'Receipt' : 'Payment', id: x.id, docNo: x.voucherNo, date: x.voucherDate, createdAt: x.createdAt, party: x.partyType === 'CUSTOMER' ? vp.customers.get(x.partyId!)?.name ?? '' : x.partyType === 'SUPPLIER' ? vp.suppliers.get(x.partyId!)?.name ?? '' : '', amount: num(x.amount), status: x.status, route: x.voucherType === 'RECEIPT' ? `/finance/receipts/${x.id}` : `/finance/payments/${x.id}` }));

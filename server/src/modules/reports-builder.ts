@@ -19,7 +19,7 @@ router.post(
   '/run',
   can('report_builder', 'view'),
   ah(async (req, res) => {
-    const fmt = z.enum(['pdf', 'xlsx', 'csv']).optional().parse(req.query.format ?? req.body?.format);
+    const fmt = z.enum(['pdf', 'xlsx', 'csv', 'docx']).optional().parse(req.query.format ?? req.body?.format);
     const body = builderSchema.parse({ ...req.body, format: undefined });
     const result = await runBuilder(body);
     if (fmt) {

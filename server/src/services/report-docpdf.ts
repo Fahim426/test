@@ -5,6 +5,8 @@ import { prisma } from '../lib/prisma';
 import { num, r2 } from '../lib/calc';
 import { notFound, badRequest } from '../lib/errors';
 import { companyInfo, newDoc, drawTable, addFooters, PdfCol, PDF_COLORS, fmtNum } from './report-export';
+import { buOfDoc } from '../lib/bu';
+import { pendingPrintNote } from './pending';
 import { iso } from './report-types';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -173,13 +175,13 @@ async function build(type: DocType, id: number): Promise<DocModel> {
       if (!dn) throw notFound('Delivery note not found');
       const [pm, so, ordItems] = await Promise.all([
         productMap(dn.items.map((i: Any) => i.productId)),
-        prisma.salesOrder.findUnique({ where: { id: dn.salesOrderId }, select: { docNo: true, customerPoNo: true } }),
+        prisma.salesOrder.findUnique({ where: { id: dn.salesOrderId }, select: { docNo: true, customerPoNo: true, proformaId: true } }),
         prisma.salesOrderItem.findMany({ where: { id: { in: dn.items.map((i: Any) => i.orderItemId) } }, select: { id: true, qty: true, unit: true } }),
       ]);
       const oi = new Map(ordItems.map((x) => [x.id, x]));
       return {
         title: 'DELIVERY NOTE', docNo: dn.docNo, date: dn.docDate, status: dn.status, partyLabel: 'DELIVER TO', party: await customerParty(dn.customerId, { address: dn.deliveryAddress }),
-        info: [['Delivery No', dn.docNo], ['Date', d(dn.docDate)], ['Sales Order', so?.docNo ?? ''], ['Customer PO', so?.customerPoNo ?? ''], ['Warehouse', await whName(dn.warehouseId)], ['Driver', dn.driver ?? ''], ['Vehicle No', dn.vehicleNo ?? '']].filter(([, x]) => x) as [string, string][],
+        info: [['Delivery No', dn.docNo], ['Date', d(dn.docDate)], ['Proforma', so?.proformaId ? (await prisma.proformaInvoice.findUnique({ where: { id: so.proformaId }, select: { docNo: true } }))?.docNo ?? '' : ''], ['Customer PO', so?.customerPoNo ?? ''], ['Warehouse', await whName(dn.warehouseId)], ['Driver', dn.driver ?? ''], ['Vehicle No', dn.vehicleNo ?? '']].filter(([, x]) => x) as [string, string][],
         columns: [
           { label: '#', type: 'number', align: 'center', w: 3 }, { label: 'Description', type: 'text', align: 'left', w: 40 }, { label: 'Unit', type: 'text', align: 'center', w: 6 },
           { label: 'Ordered', type: 'qty', align: 'right', w: 9 }, { label: 'Delivered', type: 'qty', align: 'right', w: 9 },
@@ -206,7 +208,13 @@ async function build(type: DocType, id: number): Promise<DocModel> {
 }
 
 export async function renderDocumentPdf(type: DocType, id: number): Promise<{ buffer: Buffer; filename: string }> {
-  const [co, m] = await Promise.all([companyInfo(), build(type, id)]);
+  const [co, m, pendingNote] = await Promise.all([companyInfo(), build(type, id), pendingPrintNote(type, id).catch(() => null)]);
+  // a Business Unit with its own legal name / address / TRN prints those instead of the Company details
+  const buId = await buOfDoc(type, id);
+  const bu = buId ? await prisma.businessUnit.findUnique({ where: { id: buId } }) : null;
+  if (bu?.legalName) co.name = bu.legalName;
+  if (bu?.address) co.address = bu.address;
+  if (bu?.trn) co.trn = bu.trn;
   const { doc, done } = newDoc(false);
   doc.info.Producer = co.name;
   const config = await readProductConfig();
@@ -280,6 +288,11 @@ export async function renderDocumentPdf(type: DocType, id: number): Promise<{ bu
   if (m.terms) {
     doc.font('Helvetica-Bold').fontSize(8).fillColor(PDF_COLORS.text).text('Terms & Conditions', left, ly, { width: noteW });
     doc.font('Helvetica').fontSize(8).fillColor(PDF_COLORS.muted).text(m.terms, left, doc.y, { width: noteW });
+    ly = doc.y + 6;
+  }
+  if (pendingNote) {
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#B45309').text('Pending Items', left, ly, { width: noteW });
+    doc.font('Helvetica').fontSize(8).fillColor(PDF_COLORS.text).text(pendingNote, left, doc.y, { width: noteW });
     ly = doc.y + 6;
   }
   let sy = Math.max(ty, ly) + 28;

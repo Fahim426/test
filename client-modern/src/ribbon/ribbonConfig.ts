@@ -1,12 +1,12 @@
 import {
   LayoutDashboard, Star, Zap, CheckSquare, History, BookOpen, HandCoins, Wallet, Landmark, Banknote, FileSpreadsheet,
   FileMinus, FilePlus, FolderOpen, Library, BookText, Notebook, Users, UserCheck, Clock, AlarmClock, Scale, TrendingUp,
-  BarChart3, Percent, Package, ClipboardList, FileQuestion, FileText, FileCheck, Truck, PackageCheck, Receipt,
+  BarChart3, Percent, Package, ClipboardList, ListChecks, FileQuestion, FileText, FileCheck, Truck, PackageCheck, Receipt,
   Undo2, ShoppingCart, ShoppingBag, FileSearch, GitCompare, Ship, Anchor, Boxes, Warehouse, ArrowLeftRight, SlidersHorizontal,
-  PackagePlus, ListChecks, LineChart, AlertTriangle, MapPin, Activity, Hourglass, Layers, Lock, Hash, Workflow, Settings,
+  PackagePlus, LineChart, AlertTriangle, MapPin, Activity, Hourglass, Layers, Lock, Hash, Workflow, Settings,
   ScrollText, Mail, MessageSquare, Upload, Download, DatabaseBackup, Building2, Network, GitBranch, Tag, Grid3x3,
   Contact, Globe, Briefcase, Flag, Ruler, CreditCard, Coins, Wrench, Gauge, LayoutGrid, Hammer, PackageSearch,
-  ShieldCheck, KeyRound, Calculator, FileBarChart, BadgeDollarSign, ClipboardCheck, Container, Calendar, TrendingDown,
+  ShieldCheck, KeyRound, Calculator, FileBarChart, BadgeDollarSign, ClipboardCheck, Container, Calendar, TrendingDown, Target,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -156,6 +156,7 @@ export const ribbonConfig: RibbonModule[] = [
           i('pending-deliveries', 'Pending Deliveries', Truck),
           i('pending-po', 'Pending PO', ShoppingBag),
           i('pending-grn', 'Pending GRN', PackageSearch),
+          i('pending-items', 'Pending Items', Hourglass),
         ],
       },
     ],
@@ -206,6 +207,7 @@ export const ribbonConfig: RibbonModule[] = [
           i('sales-by-product', 'Sales by Product', Package),
           i('sales-by-brand', 'Sales by Brand', Tag),
           i('salesman-sales', 'Salesman Sales', Briefcase),
+          i('salesman-incentive', 'Salesman Incentive', BadgeDollarSign),
           i('gross-profit', 'Gross Profit', Calculator),
           i('invoice-register', 'Invoice Register', Receipt),
           i('sales-return-report', 'Sales Return', Undo2),
@@ -221,6 +223,7 @@ export const ribbonConfig: RibbonModule[] = [
           i('purchase-by-brand', 'Purchase by Brand', Tag),
           i('pending-po', 'Pending PO', ShoppingBag),
           i('pending-grn', 'Pending GRN', PackageSearch),
+          i('pending-items', 'Pending Items', Hourglass),
           i('purchase-return-report', 'Purchase Return', Undo2),
           i('import-purchase-report', 'Import Purchase', Ship),
         ],
@@ -246,10 +249,18 @@ export const ribbonConfig: RibbonModule[] = [
     ],
   },
   {
-    module: 'AMC', key: 'amc',
+    module: 'AMC',
+    key: 'amc',
     groups: [
       { label: 'Contracts', items: [i('amc-contracts', 'AMC Contracts', Wrench)] },
       { label: 'Reports', items: [i('amc-reports', 'AMC Reports', TrendingUp)] },
+    ],
+  },
+  {
+    module: 'E-INVOICE',
+    key: 'einvoice',
+    groups: [
+      { label: 'UAE E-Invoicing', items: [i('einvoice', 'E-Invoice', FileCheck)] },
     ],
   },
   {
@@ -277,7 +288,7 @@ export const ribbonConfig: RibbonModule[] = [
       },
       {
         label: 'Sales Setup',
-        items: [i('areas', 'Area', MapPin), i('salesmen', 'Salesman', Contact), i('territories', 'Territory', Flag)],
+        items: [i('areas', 'Area', MapPin), i('salesmen', 'Salesman', Contact), i('sales-targets', 'Sales Targets', Target), i('territories', 'Territory', Flag)],
       },
       { label: 'Parties', items: [i('customers', 'Customers', Users), i('suppliers', 'Suppliers', Truck)] },
       {
@@ -293,7 +304,7 @@ export const ribbonConfig: RibbonModule[] = [
       { label: 'Security', items: [i('users', 'Users', Users), i('roles', 'Roles', ShieldCheck), i('permissions', 'Permissions', KeyRound)] },
       {
         label: 'Configuration',
-        items: [i('document-numbering', 'Document Numbering', Hash), i('approval-workflows', 'Approval Workflows', Workflow), i('company-configuration', 'Company & Modules', Settings), i('system-settings', 'System Settings', Settings)],
+        items: [i('document-numbering', 'Document Numbering', Hash), i('approval-workflows', 'Approval Workflows', Workflow), i('system-settings', 'System Settings', Settings), i('company-configuration', 'Company & Modules', Settings), i('company-branding', 'Company Branding', Building2)],
       },
       { label: 'Monitoring', items: [i('audit-logs', 'Audit Logs', ScrollText)] },
       { label: 'Communication', items: [i('email-settings', 'Email', Mail), i('sms-settings', 'SMS', MessageSquare)] },
@@ -308,9 +319,20 @@ export interface ScreenLocation {
   label: string;
 }
 
+export function navigationScreenId(moduleKey: string, group?: string): string {
+  return 'navigation:' + encodeURIComponent(moduleKey) + (group ? ':' + encodeURIComponent(group) : '');
+}
+
 const locIndex = new Map<string, ScreenLocation>();
-for (const m of ribbonConfig)
-  for (const g of m.groups) for (const it of g.items) if (!locIndex.has(it.id)) locIndex.set(it.id, { module: m.module, group: g.label, label: it.label });
+for (const module of ribbonConfig) {
+  locIndex.set(navigationScreenId(module.key), { module: module.module, group: '', label: module.module });
+  for (const group of module.groups) {
+    locIndex.set(navigationScreenId(module.key, group.label), { module: module.module, group: group.label, label: group.label });
+    for (const item of group.items) {
+      if (!locIndex.has(item.id)) locIndex.set(item.id, { module: module.module, group: group.label, label: item.label });
+    }
+  }
+}
 
 /** Find Module/Group for a screen id (document screens `x-form` resolve through their list screen). */
 export function locateScreen(screenId: string): ScreenLocation | undefined {

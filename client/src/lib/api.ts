@@ -1,11 +1,23 @@
 import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { useAuth } from '@/store/auth';
+import { useBuStore, useDocBuStore } from '@/store/bu';
+import { useWorkspaceStore } from '@/store/workspace';
 
 export const api = axios.create({ baseURL: '/api', timeout: 60000 });
 
 api.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
   const t = useAuth.getState().accessToken;
   if (t) cfg.headers.set('Authorization', `Bearer ${t}`);
+  // Business Unit selector (admin): narrows every list / report to one BU
+  const bu = useBuStore.getState().selectedBuId;
+  const admin = useAuth.getState().user?.role === 'Admin';
+  if (bu && admin) cfg.headers.set('X-BU', String(bu));
+  else if (admin && cfg.method && cfg.method.toLowerCase() !== 'get') {
+    // All BUs selected: a new document is saved in the BU picked on its header (per tab)
+    const tabId = useWorkspaceStore.getState().activeId;
+    const docBu = tabId ? useDocBuStore.getState().byTab[tabId] : undefined;
+    if (docBu) cfg.headers.set('X-BU', String(docBu));
+  }
   return cfg;
 });
 

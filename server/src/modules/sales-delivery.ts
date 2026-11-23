@@ -11,7 +11,7 @@ import { audit } from '../services/audit';
 import { linkDocs } from '../services/docLink';
 import { postStock, fulfillReservation, reserveStock } from '../services/stock';
 import {
-  buildListWhere, mustFound, mustStatus, approvalFor, docLinks, reservedByProduct, refreshOrderStatus, num, r3, r4,
+  buildListWhere, mustFound, mustStatus, approvalFor, docLinks, reservedByProduct, refreshOrderStatus, boolSetting, num, r3, r4,
 } from '../services/sales-common';
 import type { ModuleDef } from '../app';
 
@@ -53,8 +53,9 @@ async function detail(id: number) {
   }
   const pick = d.pickingId ? await prisma.pickingList.findUnique({ where: { id: d.pickingId }, select: { id: true, docNo: true } }) : null;
   const pack = d.packingId ? await prisma.packingList.findUnique({ where: { id: d.packingId }, select: { id: true, docNo: true } }) : null;
+  const proforma = so?.proformaId ? await prisma.proformaInvoice.findUnique({ where: { id: so.proformaId }, select: { id: true, docNo: true } }) : null;
   return {
-    ...row, salesOrder: so ? { id: so.id, docNo: so.docNo, status: so.status } : null, picking: pick, packing: pack, items,
+    ...row, salesOrder: so ? { id: so.id, docNo: so.docNo, status: so.status } : null, proforma, picking: pick, packing: pack, items,
     totalQty: r3(d.items.reduce((s, i) => s + num(i.qty), 0)), totalCost: d.status === 'POSTED' ? r3(d.items.reduce((s, i) => s + num(i.qty) * num(i.unitCost), 0)) : null,
     links: await docLinks('DELIVERY_NOTE', id), approval: await approvalFor('DELIVERY_NOTE', id),
   };
@@ -67,11 +68,17 @@ router.get('/', can('delivery_note', 'view'), ah(async (req, res) => {
     prisma.deliveryNote.findMany({ where, orderBy, skip: (q.page - 1) * q.pageSize, take: q.pageSize, include: { items: { select: { qty: true, invoicedQty: true } } } }),
     prisma.deliveryNote.count({ where }),
   ]);
-  const sos = await prisma.salesOrder.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.salesOrderId))] } }, select: { id: true, docNo: true } });
+  const sos = await prisma.salesOrder.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.salesOrderId))] } }, select: { id: true, docNo: true, proformaId: true } });
   const m = new Map(sos.map((s) => [s.id, s]));
-  const out = rows.map((r) => ({
-    ...r, items: undefined, totalQty: r3(r.items.reduce((s, i) => s + num(i.qty), 0)), invoicedQty: r3(r.items.reduce((s, i) => s + num(i.invoicedQty), 0)), salesOrder: m.get(r.salesOrderId) ?? null,
-  }));
+  const pfs = await prisma.proformaInvoice.findMany({ where: { id: { in: sos.map((s) => s.proformaId).filter((x): x is number => x != null) } }, select: { id: true, docNo: true } });
+  const pm = new Map(pfs.map((p) => [p.id, p]));
+  const out = rows.map((r) => {
+    const so = m.get(r.salesOrderId);
+    return {
+      ...r, items: undefined, totalQty: r3(r.items.reduce((s, i) => s + num(i.qty), 0)), invoicedQty: r3(r.items.reduce((s, i) => s + num(i.invoicedQty), 0)),
+      salesOrder: so ? { id: so.id, docNo: so.docNo } : null, proforma: so?.proformaId ? pm.get(so.proformaId) ?? null : null,
+    };
+  });
   await enrich(out as unknown as Record<string, unknown>[], { customerId: 'customer', warehouseId: 'warehouse' });
   res.json(paged(out, total, q));
 }));
@@ -105,6 +112,10 @@ async function createDeliveryTx(tx: Tx, req: Request, orderId: number, h: Header
     },
   });
   await linkDocs(tx, { type: 'SALES_ORDER', id: so.id, no: so.docNo }, { type: 'DELIVERY_NOTE', id: dn.id, no: dn.docNo });
+  if (so.proformaId) {
+    const pf = await tx.proformaInvoice.findUnique({ where: { id: so.proformaId }, select: { id: true, docNo: true } });
+    if (pf) await linkDocs(tx, { type: 'PROFORMA_INVOICE', id: pf.id, no: pf.docNo }, { type: 'DELIVERY_NOTE', id: dn.id, no: dn.docNo });
+  }
   if (ctx.pickingId) {
     const pk = await tx.pickingList.findUniqueOrThrow({ where: { id: ctx.pickingId } });
     await linkDocs(tx, { type: 'PICKING_LIST', id: pk.id, no: pk.docNo }, { type: 'DELIVERY_NOTE', id: dn.id, no: dn.docNo });
@@ -122,6 +133,21 @@ const fromOrder = Router();
 fromOrder.post('/:id/create-delivery', can('delivery_note', 'create'), ah(async (req, res) => {
   const h = parse(headerSchema, req.body ?? {});
   const id = await prisma.$transaction((tx) => createDeliveryTx(tx, req, intParam(req), h, null, {}), { timeout: 30000 });
+  res.status(201).json(await detail(id));
+}));
+
+/** Delivery from a confirmed proforma (runs on the order behind it): everything still to deliver unless items are given. */
+const fromProforma = Router();
+fromProforma.post('/:id/create-delivery', can('delivery_note', 'create'), ah(async (req, res) => {
+  const h = parse(headerSchema, req.body ?? {});
+  const id = await prisma.$transaction(async (tx) => {
+    const p = mustFound(await tx.proformaInvoice.findUnique({ where: { id: intParam(req) } }), 'Proforma invoice');
+    if (!p.salesOrderId || p.status === 'CANCELLED') throw badRequest(`Confirm proforma ${p.docNo} first`);
+    const so = await tx.salesOrder.findUniqueOrThrow({ where: { id: p.salesOrderId } });
+    if (so.status === 'PENDING_APPROVAL') throw badRequest(`Proforma ${p.docNo} is waiting for approval`);
+    if (!['APPROVED', 'PARTIALLY_DELIVERED'].includes(so.status)) throw badRequest(`Nothing left to deliver on proforma ${p.docNo}`);
+    return createDeliveryTx(tx, req, so.id, h, null, {});
+  }, { timeout: 30000 });
   res.status(201).json(await detail(id));
 }));
 
@@ -241,6 +267,8 @@ router.post('/:id/post', can('delivery_note', 'post'), ah(async (req, res) => {
     const so = await tx.salesOrder.findUniqueOrThrow({ where: { id: d.salesOrderId } });
     mustStatus(so, ['APPROVED', 'PARTIALLY_DELIVERED'], `post delivery (sales order ${so.docNo} is ${so.status})`);
     const codes = new Map((await tx.product.findMany({ where: { id: { in: d.items.map((i) => i.productId) } }, select: { id: true, code: true } })).map((p) => [p.id, p.code]));
+    // temporary until go-live: System Settings sales.allowNegativeStock lets deliveries take stock below zero
+    const allowNeg = await boolSetting('sales.allowNegativeStock', false, tx);
     let allBilled = true;
     for (const it of d.items) {
       const q = num(it.qty);
@@ -251,12 +279,12 @@ router.post('/:id/post', can('delivery_note', 'post'), ah(async (req, res) => {
       const extra = Math.max(0, r3(q - mine));
       const bal = await tx.stockBalance.findUnique({ where: { productId_warehouseId: { productId: it.productId, warehouseId: d.warehouseId } } });
       const onHand = num(bal?.onHand);
-      if (onHand < q - 0.0005) throw badRequest(`Insufficient stock for ${codes.get(it.productId)}: on hand ${onHand}, delivering ${q}`);
-      if (extra > 0 && onHand - num(bal?.reserved) < extra - 0.0005) {
+      if (!allowNeg && onHand < q - 0.0005) throw badRequest(`Insufficient stock for ${codes.get(it.productId)}: on hand ${onHand}, delivering ${q}`);
+      if (!allowNeg && extra > 0 && onHand - num(bal?.reserved) < extra - 0.0005) {
         throw badRequest(`Insufficient unreserved stock for ${codes.get(it.productId)}: delivering ${q}, ${mine} reserved for ${so.docNo}, free stock ${r3(onHand - num(bal?.reserved))}`);
       }
       const row = await postStock(tx, {
-        txType: 'SALES_DELIVERY', productId: it.productId, warehouseId: d.warehouseId, qty: -q, consumesReservation: true,
+        txType: 'SALES_DELIVERY', productId: it.productId, warehouseId: d.warehouseId, qty: -q, consumesReservation: true, allowNegative: allowNeg,
         refType: 'DELIVERY_NOTE', refId: d.id, refNo: d.docNo, userId: req.user?.id, date: d.docDate, remarks: `Delivery to customer, order ${so.docNo}`,
       });
       await fulfillReservation(tx, so.id, it.productId, q);
@@ -310,6 +338,7 @@ router.post('/:id/cancel', can('delivery_note', 'cancel'), ah(async (req, res) =
 export default [
   { path: '/delivery-notes', router },
   { path: '/sales-orders', router: fromOrder },
+  { path: '/proforma-invoices', router: fromProforma },
   { path: '/picking-lists', router: fromPicking },
   { path: '/packing-lists', router: fromPacking },
 ] satisfies ModuleDef[];

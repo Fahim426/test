@@ -68,9 +68,39 @@ export function ProductPicker({
   useEffect(() => setHi(0), [dq]);
 
   const open = editing && dq.length >= 1;
+  // keep the popup glued to the input while open (page / grid scroll, window resize)
   useEffect(() => {
-    if (open && ref.current) setRect(ref.current.getBoundingClientRect());
+    if (!open) return;
+    const update = () => ref.current && setRect(ref.current.getBoundingClientRect());
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
   }, [open, list.length]);
+
+  // keep the keyboard-highlighted row visible
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(`[data-idx="${hi}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [hi]);
+
+  /** Fit the popup in the viewport: open upwards when there is not enough room below, clamp height and left edge. */
+  const place = (r: DOMRect): React.CSSProperties => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const gap = 8;
+    const ideal = 360;
+    const below = vh - r.bottom - gap;
+    const above = r.top - gap;
+    const up = below < Math.min(ideal, 240) && above > below;
+    const width = Math.min(Math.max(r.width, 760), vw - gap * 2);
+    const left = Math.max(gap, Math.min(r.left, vw - width - gap));
+    const maxHeight = Math.max(120, Math.min(ideal, up ? above : below));
+    return up ? { left, bottom: vh - r.top + 2, width, maxHeight } : { left, top: r.bottom + 2, width, maxHeight };
+  };
 
   const pick = (p: ProductLookup) => {
     onPick(p);
@@ -121,21 +151,23 @@ export function ProductPicker({
         rect &&
         createPortal(
           <div
-            className="fixed z-[300] max-h-[260px] overflow-auto border border-slate-400 bg-white text-[12px] shadow-lg"
-            style={{ left: rect.left, top: rect.bottom + 1, minWidth: Math.max(rect.width, 560) }}
+            ref={listRef}
+            className="fixed z-[300] overflow-auto border border-slate-400 bg-white text-[12px] shadow-lg"
+            style={place(rect)}
             onMouseDown={(e) => e.preventDefault()}
           >
-            <div className="sticky top-0 grid grid-cols-[110px_130px_1fr_70px_70px] gap-2 border-b border-app-border bg-app-head px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
-              <span>Code</span><span>Mfr Part</span><span>Name</span><span className="text-right">On hand</span><span className="text-right">Avail.</span>
+            <div className="sticky top-0 grid grid-cols-[150px_140px_1fr_70px_70px] gap-2 border-b border-app-border bg-app-head px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
+              <span>Code</span><span>OEM</span><span>Name</span><span className="text-right">On hand</span><span className="text-right">Avail.</span>
             </div>
             {isFetching && list.length === 0 && <div className="px-2 py-1.5 text-slate-500">Searching...</div>}
             {!isFetching && list.length === 0 && <div className="px-2 py-1.5 text-slate-500">No products match &quot;{dq}&quot;</div>}
             {list.map((p, i) => (
               <div
                 key={p.id}
+                data-idx={i}
                 onClick={() => pick(p)}
                 onMouseEnter={() => setHi(i)}
-                className={cn('grid cursor-pointer grid-cols-[110px_130px_1fr_70px_70px] gap-2 px-2 py-0.5', i === hi && 'bg-brand-light')}
+                className={cn('grid cursor-pointer grid-cols-[150px_140px_1fr_70px_70px] gap-2 px-2 py-0.5', i === hi && 'bg-brand-light')}
               >
                 <span className="truncate font-medium">{p.code}</span>
                 <span className="truncate text-slate-600">{p.matchedPartNumber && p.matchedPartNumber !== p.oemNumber ? `${p.matchedPartNumber} *` : (p.oemNumber ?? '')}</span>

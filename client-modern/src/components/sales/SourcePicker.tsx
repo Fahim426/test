@@ -96,9 +96,9 @@ function SourceList({ tab, onDone }: { tab: SourceTab; onDone: () => void }) {
   );
 }
 
-export function SourcePicker({ open, title, hint, tabs, onClose }: { open: boolean; title: string; hint?: ReactNode; tabs: SourceTab[]; onClose: () => void }) {
+export function SourcePicker({ open, title, hint, tabs, onClose, footerExtra }: { open: boolean; title: string; hint?: ReactNode; tabs: SourceTab[]; onClose: () => void; footerExtra?: ReactNode }) {
   return (
-    <Modal open={open} title={title} onClose={onClose} width="xl" footer={<Button onClick={onClose}>Close</Button>}>
+    <Modal open={open} title={title} onClose={onClose} width="xl" footer={<>{footerExtra}<Button onClick={onClose}>Close</Button></>}>
       {hint && <div className="mb-2 text-[13px] text-ink-muted">{hint}</div>}
       {tabs.length === 1 ? (
         <SourceList tab={tabs[0]} onDone={onClose} />

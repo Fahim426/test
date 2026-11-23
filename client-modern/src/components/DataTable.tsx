@@ -138,6 +138,19 @@ function renderValue(v: unknown, type: ColumnType | undefined): ReactNode {
     default: return v === null || v === undefined ? '' : String(v);
   }
 }
+/** Status cell + "Pending n" chip when the server marked the row (pendingCount: items not carried to the next document). */
+function withPending(node: ReactNode, row: unknown): ReactNode {
+  const n = Number((row as { pendingCount?: number } | null)?.pendingCount ?? 0);
+  if (!n) return node;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {node}
+      <span title={`${n} item${n === 1 ? '' : 's'} not yet carried to the next document`} className="inline-flex items-center whitespace-nowrap rounded-full border border-warning/40 bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-warning">
+        Pending {n}
+      </span>
+    </span>
+  );
+}
 const isRight = (c: { type?: ColumnType; align?: string }) => c.align === 'right' || (!c.align && (c.type === 'money' || c.type === 'qty' || c.type === 'number' || c.type === 'percent'));
 
 function plainValue<T>(c: Column<T>, row: T): string | number {
@@ -269,7 +282,7 @@ export function DataTable<T extends object>(props: DataTableProps<T>) {
         id: c.key,
         header: c.header,
         accessorFn: (r: T) => (c.accessor ? c.accessor(r) : getPath(r, c.key)),
-        cell: (ctx) => (c.cell ? c.cell(ctx.row.original) : renderValue(ctx.getValue(), c.type)),
+        cell: (ctx) => (c.cell ? c.cell(ctx.row.original) : c.type === 'status' ? withPending(renderValue(ctx.getValue(), c.type), ctx.row.original) : renderValue(ctx.getValue(), c.type)),
         enableSorting: false,
       })),
     [columns],
@@ -449,7 +462,7 @@ export function DataTable<T extends object>(props: DataTableProps<T>) {
             </button>
             {menu === 'export' && (
               <div className={cn(popover, 'w-[170px]')}>
-                {([['csv', 'CSV'], ['xlsx', 'Excel (.xlsx)'], ['pdf', 'PDF']] as [ExportFormat, string][]).map(([f, label]) => (
+                {([['csv', 'CSV'], ['xlsx', 'Excel (.xlsx)'], ['pdf', 'PDF'], ['docx', 'Word (.docx)']] as [ExportFormat, string][]).map(([f, label]) => (
                   <button key={f} className="menu-item" onClick={() => doExport(f)}>
                     {label}
                   </button>

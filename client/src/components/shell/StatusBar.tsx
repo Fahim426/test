@@ -33,6 +33,7 @@ export function StatusBar() {
         API {status.isLoading ? 'checking' : online ? `online (${status.data} ms)` : 'offline'}
       </span>
       <span>{fmt.date(now)} {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}</span>
+      <span className="opacity-80">Powered by SmartFlix Technologies</span>
     </div>
   );
 }

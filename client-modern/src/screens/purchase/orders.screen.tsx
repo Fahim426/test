@@ -20,6 +20,7 @@ import {
   StatusStepper, StdActions, strOrNull, TransitionDef, useDocForm, useLookups, FV, SupplierSelect, useAsk,
 } from '@/components/purchase/kit';
 import { applySupplierDefaults, pickPurchaseProduct } from '@/components/purchase/helpers';
+import { NewPurchaseOrderPicker } from '@/components/purchase/pickers';
 import { useWatch } from 'react-hook-form';
 
 type Kind = 'LOCAL' | 'IMPORT';
@@ -57,6 +58,7 @@ function PurchaseOrdersScreen() {
   return (
     <PurchaseList<PORow>
       tableKey="purchase-orders" url="/purchase-orders" title="Purchase Order" formScreen="purchase-order-form" module="purchase_order" newLabel="New PO" columns={cols} statuses={LOCAL_STATUSES} pdfType="PURCHASE_ORDER"
+      picker={(p) => <NewPurchaseOrderPicker {...p} />}
       rowActions={(r, open): RowAction<PORow>[] => [
         { label: 'Create GRN', icon: PackagePlus, hidden: (x) => !['APPROVED', 'PARTIALLY_RECEIVED'].includes(x.status) || !can('goods_receipt', 'create'), onClick: () => { open('goods-receipt-form', { orderId: r.id }, 'New GRN'); } },
         {

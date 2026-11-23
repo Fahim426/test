@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { prisma } from "../lib/prisma";
 import { env } from "../lib/env";
 
@@ -53,6 +55,26 @@ export async function readCompanyLogo(
   config?: Awaited<ReturnType<typeof readProductConfig>>,
 ) {
   const c = config ?? (await readProductConfig());
+  if (c.company?.logo === "") return null;
+  if (c.company?.logo) {
+    const match = /^data:image\/(?:png|jpeg|webp|svg\+xml);base64,([A-Za-z0-9+/=]+)$/.exec(c.company.logo);
+    if (match) {
+      const image = Buffer.from(match[1], "base64");
+      const name = createHash("sha256").update(image).digest("hex") + ".png";
+      const directory = path.resolve(env.uploadDir, "company-brand");
+      const file = path.join(directory, name);
+      try {
+        return { file, data: await fs.readFile(file) };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      const data = await sharp(image, { limitInputPixels: 20_000_000 }).resize({ width: 1000, height: 500, fit: "inside", withoutEnlargement: true }).png().toBuffer();
+      await fs.mkdir(directory, { recursive: true });
+      try { await fs.writeFile(file, data, { flag: "wx" }); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+      return { file, data };
+    }
+  }
   let file: string | undefined;
   if (c.logoFile && /^[a-f0-9-]+\.png$/i.test(c.logoFile))
     file = path.resolve(env.uploadDir, "company-brand", c.logoFile);

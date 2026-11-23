@@ -12,11 +12,13 @@ import {
   approveOrder, rejectOrder, assertStatus, buildOrderData, deleteLinks, listDocs, orderDetail, orderQtys, orderRow, poSchema, submitOrder, LOCAL_RECEIVABLE,
 } from '../services/purchase-common';
 import { nextNumber } from '../services/numbering';
+import { syncParentsMiddleware } from '../services/pending';
 import type { ModuleDef } from '../app';
 
 const T = { timeout: 30000 };
 const P = 'purchase_order';
 const router = Router();
+router.use('/:id', syncParentsMiddleware('PURCHASE_ORDER'));
 
 router.get('/', can(P, 'view'), ah(async (req, res) => {
   const ot = String(req.query.orderType || 'LOCAL').toUpperCase();

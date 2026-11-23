@@ -233,6 +233,7 @@ function OrderForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType={TYPE} docId={doc.id} />
         <WarningsBanner warnings={warnings} onClose={() => setWarnings([])} />
         {status === 'PENDING_APPROVAL' && <InfoBanner tone="amber">This order is waiting for approval. Stock is reserved when the last approval step is approved.</InfoBanner>}
         {summary && showProgress && (
@@ -306,7 +307,6 @@ function OrderForm({ params, tabId }: ScreenProps) {
 
         <ApprovalSection approval={doc.data?.approval} onChanged={doc.refetch} />
         <AttachmentsSection docType={TYPE} docId={doc.id} />
-        <DocumentFlow docType={TYPE} docId={doc.id} />
         <AuditSection doc={doc.data} />
       <RevisionHistory entity="SalesOrder" id={doc.id} />
       </DocumentLayout>

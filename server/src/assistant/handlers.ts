@@ -1,3 +1,4 @@
+import { scopeSql } from '../lib/bu';
 ﻿import { prisma, Prisma } from "../lib/prisma";
 import type { AuthUser } from "../middleware/auth";
 import { branchScope, canView, AccessError } from "./security";
@@ -15,7 +16,7 @@ const money = (value: any) =>
     maximumFractionDigits: 2,
   });
 const sqlRows = async (query: Prisma.Sql): Promise<Rows> =>
-  prisma.$queryRaw<Rows>(query);
+  prisma.$queryRaw<Rows>(scopeSql(query));
 const normal = (v: any): any =>
   v instanceof Date
     ? v.toISOString().slice(0, 10)

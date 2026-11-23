@@ -112,8 +112,8 @@ async function setStatus(req: import('express').Request, to: string, from: strin
   });
   return detail(id);
 }
-router.post('/:id/cancel', can('sales_enquiry', 'cancel'), ah(async (req, res) => res.json(await setStatus(req, 'CANCELLED', ['OPEN', 'QUOTED'], 'CANCEL'))));
-router.post('/:id/close', can('sales_enquiry', 'edit'), ah(async (req, res) => res.json(await setStatus(req, 'CLOSED', ['OPEN', 'QUOTED'], 'CLOSE'))));
+router.post('/:id/cancel', can('sales_enquiry', 'cancel'), ah(async (req, res) => res.json(await setStatus(req, 'CANCELLED', ['OPEN', 'QUOTED', 'PARTIALLY_QUOTED'], 'CANCEL'))));
+router.post('/:id/close', can('sales_enquiry', 'edit'), ah(async (req, res) => res.json(await setStatus(req, 'CLOSED', ['OPEN', 'QUOTED', 'PARTIALLY_QUOTED'], 'CLOSE'))));
 router.post('/:id/reopen', can('sales_enquiry', 'edit'), ah(async (req, res) => res.json(await setStatus(req, 'OPEN', ['CLOSED', 'CANCELLED'], 'REOPEN'))));
 
 // POST /:id/create-quotation lives in sales-quotations.ts (mounted on /sales-enquiries too)

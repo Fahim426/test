@@ -4,7 +4,7 @@ import { RevisionHistory } from '@/components/doc/RevisionHistory';
 import { ProductPhoto, uploadProductPhoto } from '@/components/inventory/ProductPhoto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FormProvider, useFieldArray, useForm, useWatch } from 'react-hook-form';
-import { Package, Plus, Save, Trash2, X, Copy } from 'lucide-react';
+import { Package, Plus, Save, Trash2, X, Copy, ImageOff } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column, DataTable } from '@/components/DataTable';
 import { DocAction, DocActionSep, DocumentLayout, HeaderSection } from '@/components/doc';
@@ -13,7 +13,7 @@ import { useDocument } from '@/hooks/useDocument';
 import { useOpenScreen, useWorkspace } from '@/store/workspace';
 import { usePermission } from '@/store/auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { apiError } from '@/lib/api';
+import { api, apiError } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { toast } from '@/store/toast';
 import { DocLink, numOr0, numOrNull, strOrNull, toStr, useMasterRows, useOptions } from '@/components/inventory/common';
@@ -23,6 +23,7 @@ interface ProductRow {
   id: number;
   code: string;
   name: string;
+  imageUrl?: string | null;
   oemNumber?: string | null;
   barcode?: string | null;
   brand?: { name: string } | null;
@@ -54,6 +55,7 @@ interface ProductDoc extends Record<string, unknown> {
   id: number;
   code: string;
   name: string;
+  imageUrl?: string | null;
   isActive: boolean;
   onHand: number;
   reserved: number;
@@ -75,19 +77,19 @@ interface ProductDoc extends Record<string, unknown> {
 }
 
 interface PForm {
-  code: string; name: string; arabicName: string; description: string; barcode: string; oemNumber: string;
+  code: string; stockNumber: string; name: string; arabicName: string; description: string; barcode: string; oemNumber: string;
   brandId: string; categoryId: string; subCategoryId: string; productGroupId: string; productTypeId: string;
   purchaseUnit: string; salesUnit: string; isActive: boolean;
   costPrice: string; averageCost: string; lastPurchasePrice: string; retailPrice: string; wholesalePrice: string;
   minStock: string; maxStock: string; reorderLevel: string; vatRate: string;
   weight: string; length: string; width: string; height: string; countryOfOrigin: string; warranty: string;
   primarySupplierId: string; defaultWarehouseId: string; rack: string; shelf: string; bin: string;
-  partNumbers: { number: string; kind: 'OEM' | 'ALTERNATE' }[];
+  partNumbers: { number: string; kind: 'OEM' | 'ALTERNATE'; brand: string }[];
   vehicles: { make: string; model: string; variant: string; yearFrom: string; yearTo: string; engine: string; fuel: string; transmission: string }[];
 }
 
 const EMPTY: PForm = {
-  code: '', name: '', arabicName: '', description: '', barcode: '', oemNumber: '',
+  code: '', stockNumber: '', name: '', arabicName: '', description: '', barcode: '', oemNumber: '',
   brandId: '', categoryId: '', subCategoryId: '', productGroupId: '', productTypeId: '',
   purchaseUnit: 'PCS', salesUnit: 'PCS', isActive: true,
   costPrice: '0', averageCost: '0', lastPurchasePrice: '0', retailPrice: '0', wholesalePrice: '0',
@@ -101,7 +103,7 @@ function toForm(p: ProductDoc): PForm {
   const g = (k: string) => toStr(p[k]);
   const oem = (p.oemNumber as string | null | undefined)?.toUpperCase();
   return {
-    code: p.code, name: p.name, arabicName: g('arabicName'), description: g('description'), barcode: g('barcode'), oemNumber: g('oemNumber'),
+    code: p.code, stockNumber: g('stockNumber'), name: p.name, arabicName: g('arabicName'), description: g('description'), barcode: g('barcode'), oemNumber: g('oemNumber'),
     brandId: g('brandId'), categoryId: g('categoryId'), subCategoryId: g('subCategoryId'), productGroupId: g('productGroupId'), productTypeId: g('productTypeId'),
     purchaseUnit: g('purchaseUnit') || 'PCS', salesUnit: g('salesUnit') || 'PCS', isActive: !!p.isActive,
     costPrice: g('costPrice'), averageCost: g('averageCost'), lastPurchasePrice: g('lastPurchasePrice'), retailPrice: g('retailPrice'), wholesalePrice: g('wholesalePrice'),
@@ -109,7 +111,7 @@ function toForm(p: ProductDoc): PForm {
     weight: g('weight'), length: g('length'), width: g('width'), height: g('height'), countryOfOrigin: g('countryOfOrigin'), warranty: g('warranty'),
     primarySupplierId: g('primarySupplierId'), defaultWarehouseId: g('defaultWarehouseId'), rack: g('rack'), shelf: g('shelf'), bin: g('bin'),
     // the server regenerates the primary OEM row from oemNumber, so don't duplicate it in the grid
-    partNumbers: (p.partNumbers ?? []).filter((x) => !(x.kind === 'OEM' && x.number.toUpperCase() === oem)).map((x) => ({ number: x.number, kind: x.kind === 'OEM' ? 'OEM' : 'ALTERNATE' })),
+    partNumbers: (p.partNumbers ?? []).filter((x) => !(x.kind === 'OEM' && x.number.toUpperCase() === oem)).map((x) => ({ number: x.number, kind: x.kind === 'OEM' ? 'OEM' : 'ALTERNATE', brand: toStr((x as { brand?: string | null }).brand) })),
     vehicles: (p.vehicles ?? []).map((v) => ({
       make: toStr(v.make), model: toStr(v.model), variant: toStr(v.variant), yearFrom: toStr(v.yearFrom), yearTo: toStr(v.yearTo),
       engine: toStr(v.engine), fuel: toStr(v.fuel), transmission: toStr(v.transmission),
@@ -121,6 +123,7 @@ function toPayload(v: PForm, isNew: boolean) {
   return {
     ...(v.code.trim() ? { code: v.code.trim() } : {}),
     name: v.name.trim(),
+    stockNumber: strOrNull(v.stockNumber),
     arabicName: strOrNull(v.arabicName),
     description: strOrNull(v.description),
     oemNumber: strOrNull(v.oemNumber),
@@ -152,7 +155,7 @@ function toPayload(v: PForm, isNew: boolean) {
     rack: strOrNull(v.rack),
     shelf: strOrNull(v.shelf),
     bin: strOrNull(v.bin),
-    partNumbers: v.partNumbers.filter((p) => p.number.trim()).map((p) => ({ number: p.number.trim(), kind: p.kind })),
+    partNumbers: v.partNumbers.filter((p) => p.number.trim()).map((p) => ({ number: p.number.trim(), kind: p.kind, brand: p.kind === 'ALTERNATE' ? strOrNull(p.brand) : null })),
     vehicles: v.vehicles
       .filter((x) => x.make.trim() && x.model.trim())
       .map((x) => ({
@@ -179,6 +182,7 @@ function ProductsScreen() {
   const columns: Column<ProductRow>[] = [
     { key: 'photo', header: 'Photo', noExport: true, width: 80, sortable: false, cell: r => <ProductPhoto productId={r.id} name={r.name} /> },
     { key: 'code', header: 'Code', width: 110 },
+    { key: 'stockNumber', header: 'Stock No', width: 110 },
     { key: 'oemNumber', header: 'Mfr Part No', width: 130 },
     { key: 'name', header: 'Description' },
     { key: 'brand.name', header: 'Brand', width: 110, sortable: false },
@@ -191,6 +195,9 @@ function ProductsScreen() {
       cell: (r) => <span className={r.available <= 0 ? 'text-danger' : ''}>{fmt.qty(r.available)}</span> },
     { key: 'reorderLevel', header: 'Reorder', type: 'qty', width: 70, hidden: true, sortable: false },
     { key: 'costPrice', header: 'Cost', type: 'money', width: 85 },
+    { key: 'averageCost', header: 'Avg Cost', type: 'money', width: 85 },
+    { key: 'lastPurchasePrice', header: 'Last Purch.', type: 'money', width: 90 },
+    { key: 'lastPurchaseAt', header: 'Last Purchased', type: 'date', width: 105 },
     { key: 'retailPrice', header: 'Retail', type: 'money', width: 85 },
     { key: 'wholesalePrice', header: 'Wholesale', type: 'money', width: 85, hidden: true, sortable: false },
     { key: 'isActive', header: 'Active', type: 'boolean', width: 60, sortable: false },
@@ -202,7 +209,7 @@ function ProductsScreen() {
       url="/products"
       columns={columns.filter(c => (features.productImages || c.key !== 'photo') && (features.partNumbers || c.key !== 'oemNumber'))}
       exportName="Products"
-      defaultSort={{ key: 'code', dir: 'asc' }}
+      defaultSort={{ key: 'lastPurchaseAt', dir: 'desc' }}
       searchPlaceholder="Search code / manufacturer part / alternate / barcode / name / equipment / brand..."
       filters={{ brandId, categoryId, productGroupId, active, lowStock: lowStock ? 'true' : '' }}
       onRowDoubleClick={(r) => open('product-form', { id: r.id }, r.code)}
@@ -378,6 +385,7 @@ function ProductForm({ params, tabId }: ScreenProps) {
                   <HeaderSection title="General" columns={4} className="border-0">
                     {features.productImages && <div className="col-span-full"><ProductPhoto productId={d?.id} name={d?.name} editable={!ro && can('products', 'edit')} selectedFile={pendingPhoto} onSelectFile={setPendingPhoto} disabled={doc.saving || savingPhoto} large /></div>}
                     <Field label="Code" hint={doc.isNew ? 'Leave blank to auto-generate' : undefined}><Input {...register('code')} readOnly={!doc.isNew} placeholder="(auto)" /></Field>
+                    <Field label="Stock Number" hint="Second internal code, unique" error={err('stockNumber')}><Input {...register('stockNumber')} readOnly={ro} /></Field>
                     <Field label="Name" required className="col-span-2" error={err('name')}><Input {...register('name', { required: 'Name required' })} readOnly={ro} /></Field>
                     <Field label="Arabic Name"><Input dir="rtl" {...register('arabicName')} readOnly={ro} /></Field>
                     <Field label="Brand"><Select options={brands.options} placeholder="-" disabled={ro} {...register('brandId')} /></Field>
@@ -402,20 +410,21 @@ function ProductForm({ params, tabId }: ScreenProps) {
                     <div className="mb-2 grid grid-cols-4 gap-3">
                       <Field label="Manufacturer Part Number" hint="Searchable manufacturer part number"><Input {...register('oemNumber')} readOnly={ro} /></Field>
                     </div>
-                    <table className="w-full max-w-[640px] border-collapse text-[13px]">
-                      <thead><tr className="bg-surface-2"><th className={th}>Part Number (manufacturer / alternate / interchange)</th><th className={`${th} w-32`}>Kind</th><th className="grid-th w-8" /></tr></thead>
+                    <table className="w-full max-w-[820px] border-collapse text-[13px]">
+                      <thead><tr className="bg-surface-2"><th className={th}>Part Number (OEM / alternative / interchange)</th><th className={`${th} w-32`}>Kind</th><th className={`${th} w-40`}>Brand (alternative)</th><th className="grid-th w-8" /></tr></thead>
                       <tbody>
                         {pn.fields.map((f, i) => (
                           <tr key={f.id} className="h-9">
                             <td className={td}><Input className={cellInput} readOnly={ro} {...register(`partNumbers.${i}.number`)} /></td>
-                            <td className={td}><Select className={cellInput} disabled={ro} options={[{ value: 'OEM', label: 'Manufacturer' }, { value: 'ALTERNATE', label: 'Alternate' }]} {...register(`partNumbers.${i}.kind`)} /></td>
+                            <td className={td}><Select className={cellInput} disabled={ro} options={[{ value: 'OEM', label: 'OEM' }, { value: 'ALTERNATE', label: 'Alternative' }]} {...register(`partNumbers.${i}.kind`)} /></td>
+                            <td className={td}><Input className={cellInput} placeholder="Alternative brand" readOnly={ro} {...register(`partNumbers.${i}.brand`)} /></td>
                             <td className={`${td} text-center`}>{!ro && <IconButton icon={X} label="Remove" variant="danger" onClick={() => pn.remove(i)} />}</td>
                           </tr>
                         ))}
-                        {pn.fields.length === 0 && <tr><td colSpan={3} className="p-3 text-center text-ink-faint">No alternate numbers</td></tr>}
+                        {pn.fields.length === 0 && <tr><td colSpan={4} className="p-3 text-center text-ink-faint">No alternative numbers</td></tr>}
                       </tbody>
                     </table>
-                    {!ro && <Button className="mt-2" icon={Plus} onClick={() => pn.append({ number: '', kind: 'ALTERNATE' })}>Add Part Number</Button>}
+                    {!ro && <Button className="mt-2" icon={Plus} onClick={() => pn.append({ number: '', kind: 'ALTERNATE', brand: '' })}>Add Part Number</Button>}
                   </div>
                 ),
               },

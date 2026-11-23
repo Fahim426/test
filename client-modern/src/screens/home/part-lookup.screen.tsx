@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ExternalLink, PackageSearch, Search } from 'lucide-react';
+import { ExternalLink, PackageSearch, Search, SlidersHorizontal } from 'lucide-react';
 import { api, apiError } from '@/lib/api';
 import { fmt } from '@/lib/format';
 import { cn } from '@/lib/cn';
@@ -34,7 +34,7 @@ interface WhStock {
   avgCost?: number;
   value?: number;
 }
-interface PartNo { id: number; number: string; kind?: string }
+interface PartNo { id: number; number: string; kind?: string; brand?: string | null }
 interface Vehicle { id: number; make?: string; model?: string; variant?: string | null; yearFrom?: number | null; yearTo?: number | null; engine?: string | null }
 interface Product {
   id: number;
@@ -43,6 +43,7 @@ interface Product {
   arabicName?: string | null;
   description?: string | null;
   oemNumber?: string | null;
+  stockNumber?: string | null;
   barcode?: string | null;
   brand?: { name?: string } | null;
   category?: { name?: string } | null;
@@ -117,11 +118,105 @@ function Table<T>({ rows, cols, onRow }: { rows: T[]; cols: Col<T>[]; onRow?: (r
   );
 }
 
+/* ------------------------------------------------------------------ advanced search */
+interface AdvRow {
+  id: number; code: string; stockNumber?: string | null; oemNumber?: string | null; name: string; brand?: { name?: string } | null;
+  retailPrice?: number; averageCost?: number; lastPurchasePrice?: number; lastPurchaseAt?: string | null; onHand?: number; available?: number;
+}
+interface Adv { code: string; stockNumber: string; oem: string; altNo: string; brandIds: number[]; make: string; model: string; year: string }
+const ADV0: Adv = { code: '', stockNumber: '', oem: '', altNo: '', brandIds: [], make: '', model: '', year: '' };
+
+/** One box per condition; a product must match every filled box. Results: most recently purchased first. */
+function AdvancedSearch({ onPick }: { onPick: (code: string) => void }) {
+  const [f, setF] = useState<Adv>(ADV0);
+  const [applied, setApplied] = useState<Adv | null>(null);
+  const brands = useQuery({ queryKey: ['adv-brands'], staleTime: 300_000, queryFn: async () => (await api.get<{ rows: { id: number; code: string; name: string }[] }>('/brands', { params: { pageSize: 1000 } })).data.rows });
+  const filled = (a: Adv) => !!(a.code || a.stockNumber || a.oem || a.altNo || a.brandIds.length || a.make || a.model || a.year);
+  const res = useQuery({
+    queryKey: ['adv-search', applied],
+    enabled: !!applied && filled(applied),
+    queryFn: async () => {
+      const a = applied!;
+      const params = { code: a.code || undefined, stockNumber: a.stockNumber || undefined, oem: a.oem || undefined, altNo: a.altNo || undefined, brandIds: a.brandIds.join(',') || undefined, make: a.make || undefined, model: a.model || undefined, year: a.year || undefined, pageSize: 100 };
+      return (await api.get<{ rows: AdvRow[]; total: number }>('/products', { params })).data;
+    },
+  });
+  const set = (k: keyof Adv, v: string) => setF((x) => ({ ...x, [k]: v }));
+  const box = (k: Exclude<keyof Adv, 'brandIds'>, label: string, ph?: string, w = 'w-40') => (
+    <label className="flex flex-col gap-0.5 text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+      {label}
+      <input className={cn('ctl', w)} placeholder={ph} value={f[k]} onChange={(e) => set(k, e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setApplied({ ...f })} />
+    </label>
+  );
+  const brandName = (id: number) => brands.data?.find((b) => b.id === id)?.name ?? `#${id}`;
+  return (
+    <Panel title="Advanced search" right={<span className="text-xs text-ink-muted">All filled conditions must match</span>}>
+      <div className="flex flex-wrap items-end gap-3">
+        {box('code', 'Product code')}
+        {box('stockNumber', 'Stock No')}
+        {box('oem', 'Mfr Part No')}
+        {box('altNo', 'Alternative No / brand')}
+        <label className="flex flex-col gap-0.5 text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+          Brand (multiple)
+          <select className="ctl w-44" value="" onChange={(e) => { const id = Number(e.target.value); if (id && !f.brandIds.includes(id)) setF((x) => ({ ...x, brandIds: [...x.brandIds, id] })); }}>
+            <option value="">+ Add brand...</option>
+            {(brands.data ?? []).filter((b) => !f.brandIds.includes(b.id)).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </label>
+        {box('make', 'Vehicle make', 'Toyota', 'w-32')}
+        {box('model', 'Model', 'Hilux', 'w-32')}
+        {box('year', 'Year', '2018', 'w-20')}
+        <Button variant="primary" icon={Search} onClick={() => setApplied({ ...f })} disabled={!filled(f)}>Search</Button>
+        <Button onClick={() => { setF(ADV0); setApplied(null); }}>Clear</Button>
+      </div>
+      {f.brandIds.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {f.brandIds.map((id) => (
+            <button key={id} className="rounded-full border border-brand/30 bg-brand-soft px-2.5 py-0.5 text-xs text-brand-ink" onClick={() => setF((x) => ({ ...x, brandIds: x.brandIds.filter((b) => b !== id) }))} title="Remove">
+              {brandName(id)} ×
+            </button>
+          ))}
+        </div>
+      )}
+      {applied && filled(applied) && (
+        <div className="mt-3 rounded-lg border border-line">
+          {res.isLoading ? (
+            <LoadingBlock />
+          ) : res.isError ? (
+            <ErrorState message={apiError(res.error)} onRetry={() => res.refetch()} />
+          ) : (
+            <>
+              <div className="border-b border-line px-3 py-1.5 text-xs text-ink-muted">{res.data?.total ?? 0} products{(res.data?.total ?? 0) > 100 ? ' (first 100 shown)' : ''} · most recently purchased first · click to open</div>
+              <Table<AdvRow>
+                rows={res.data?.rows ?? []}
+                onRow={(r) => onPick(r.code)}
+                cols={[
+                  { header: 'Code', cell: (r) => <span className="font-medium text-brand">{r.code}</span> },
+                  { header: 'Stock No', cell: (r) => r.stockNumber },
+                  { header: 'OEM', cell: (r) => r.oemNumber },
+                  { header: 'Name', cell: (r) => <span className="inline-block max-w-[280px] truncate align-bottom">{r.name}</span> },
+                  { header: 'Brand', cell: (r) => r.brand?.name },
+                  { header: 'Retail', right: true, cell: (r) => fmt.money(r.retailPrice) },
+                  { header: 'Avg cost', right: true, cell: (r) => fmt.money(r.averageCost) },
+                  { header: 'Last pur.', right: true, cell: (r) => fmt.money(r.lastPurchasePrice) },
+                  { header: 'Last purchased', cell: (r) => fmt.date(r.lastPurchaseAt) },
+                  { header: 'On hand', right: true, cell: (r) => fmt.qty(r.onHand) },
+                ]}
+              />
+            </>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function PartLookupScreen({ params }: ScreenProps) {
   const open = useOpenScreen();
   const initial = typeof params.number === 'string' ? params.number : params.number !== undefined ? String(params.number) : '';
   const [number, setNumber] = useState(initial);
   const [input, setInput] = useState(initial);
+  const [advOpen, setAdvOpen] = useState(false);
   useEffect(() => {
     setNumber(initial);
     setInput(initial);
@@ -175,6 +270,7 @@ function PartLookupScreen({ params }: ScreenProps) {
           />
         </div>
         <Button variant="primary" onClick={search}>Search</Button>
+        <Button icon={SlidersHorizontal} variant={advOpen ? 'primary' : 'default'} onClick={() => setAdvOpen((x) => !x)}>Advanced search</Button>
         {d?.matches && d.matches.length > 1 && (
           <select
             className="ctl !w-[320px]"
@@ -195,7 +291,8 @@ function PartLookupScreen({ params }: ScreenProps) {
       </div>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-auto p-6">
-        {!number.trim() && <div className="mx-auto max-w-sm rounded-card border border-dashed border-line-strong bg-surface p-10 text-center text-[13px] text-ink-muted">Enter a part number to look up stock, purchase and sales history.</div>}
+        {advOpen && <AdvancedSearch onPick={(code) => { setInput(code); setNumber(code); }} />}
+        {!number.trim() && !advOpen && <div className="mx-auto max-w-sm rounded-card border border-dashed border-line-strong bg-surface p-10 text-center text-[13px] text-ink-muted">Enter a part number to look up stock, purchase and sales history.</div>}
         {q.isLoading && number.trim() && <LoadingBlock />}
         {q.isError && <ErrorState message={apiError(q.error)} onRetry={() => q.refetch()} />}
 
@@ -216,6 +313,7 @@ function PartLookupScreen({ params }: ScreenProps) {
                 <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
                   <div>
                     <KV label="Code">{p.code}</KV>
+                    <KV label="Stock No">{p.stockNumber}</KV>
                     <KV label="Mfr Part No">{p.oemNumber}</KV>
                     <KV label="Barcode">{p.barcode}</KV>
                     <KV label="Brand">{p.brand?.name}</KV>
@@ -238,6 +336,7 @@ function PartLookupScreen({ params }: ScreenProps) {
                     {p.partNumbers?.map((n) => (
                       <button key={n.id} className="rounded-full border border-line bg-surface-2 px-2.5 py-0.5 leading-4 transition hover:border-brand/40 hover:bg-brand-soft" title={n.kind} onClick={() => { setInput(n.number); setNumber(n.number); }}>
                         {n.number}
+                        {n.brand && <span className="ml-1 text-ink-faint">{n.brand}</span>}
                         {n.kind && n.kind !== 'ALTERNATE' && <span className="ml-1 text-ink-faint">{n.kind.toLowerCase()}</span>}
                       </button>
                     ))}

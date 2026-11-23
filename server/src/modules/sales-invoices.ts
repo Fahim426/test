@@ -3,7 +3,7 @@ import { Router, Request } from 'express';
 import { z } from 'zod';
 import { prisma, Tx } from '../lib/prisma';
 import { ah, parse, intParam, paged } from '../lib/http';
-import { badRequest, conflict } from '../lib/errors';
+import { badRequest } from '../lib/errors';
 import { can } from '../middleware/auth';
 import { enrich } from '../lib/enrich';
 import { nextNumber } from '../services/numbering';
@@ -11,8 +11,9 @@ import { audit } from '../services/audit';
 import { linkDocs } from '../services/docLink';
 import { postJournal, reverseJournal } from '../services/accounting';
 import {
-  buildListWhere, mustFound, mustStatus, approvalFor, docLinks, refreshOrderStatus, boolSetting, resolveTerm, addDays, num, r2, r3, r4, calcLine, calcTotals,
+  buildListWhere, mustFound, mustStatus, approvalFor, docLinks, refreshOrderStatus, boolSetting, resolveTerm, num, r2, r3, r4, calcLine, calcTotals,
 } from '../services/sales-common';
+import { dueDateFor } from '../lib/terms';
 import type { ModuleDef } from '../app';
 
 const router = Router();
@@ -90,7 +91,7 @@ async function persistInvoice(
   const docNo = await nextNumber(tx, 'SALES_INVOICE', { date: docDate });
   const inv = await tx.salesInvoice.create({
     data: {
-      docNo, docDate, dueDate: ctx.dueDate ?? addDays(docDate, term.days), customerId: so.customerId, salesmanId: so.salesmanId, salesOrderId: so.id,
+      docNo, docDate, dueDate: ctx.dueDate ?? dueDateFor(docDate, term), customerId: so.customerId, salesmanId: so.salesmanId, salesOrderId: so.id,
       deliveryId: ctx.deliveryId ?? null, proformaId: ctx.proformaId ?? null, trn: cust.trn, address: [cust.address, cust.city, cust.country].filter(Boolean).join(', ') || null,
       currencyCode: so.currencyCode, exchangeRate: rate, paymentTerms: term.name, subtotal: totals.subtotal, discount: totals.discount, vatAmount: totals.vatAmount,
       roundOff: totals.roundOff, total: totals.total, baseTotal: r2(totals.total * rate), remarks: ctx.remarks ?? null, createdBy: req.user?.id, items: { create: lines },
@@ -175,7 +176,9 @@ async function detail(id: number) {
   const inv = mustFound(await prisma.salesInvoice.findUnique({ where: { id }, include: { items: { orderBy: { id: 'asc' } } } }), 'Sales invoice');
   const [row] = await enrich([inv as unknown as Record<string, unknown>], { customerId: 'customer', salesmanId: 'salesman' });
   const items = await enrich(inv.items as unknown as Record<string, unknown>[], { productId: 'product' });
-  const so = inv.salesOrderId ? await prisma.salesOrder.findUnique({ where: { id: inv.salesOrderId }, select: { id: true, docNo: true, customerPoNo: true } }) : null;
+  const so = inv.salesOrderId ? await prisma.salesOrder.findUnique({ where: { id: inv.salesOrderId }, select: { id: true, docNo: true, customerPoNo: true, proformaId: true } }) : null;
+  const pfId = inv.proformaId ?? so?.proformaId ?? null;
+  const proforma = pfId ? await prisma.proformaInvoice.findUnique({ where: { id: pfId }, select: { id: true, docNo: true } }) : null;
   const dn = inv.deliveryId ? await prisma.deliveryNote.findUnique({ where: { id: inv.deliveryId }, select: { id: true, docNo: true } }) : null;
   const journals = await prisma.journalEntry.findMany({ where: { sourceType: 'SALES_INVOICE', sourceId: id }, select: { id: true, entryNo: true, narration: true, status: true, totalDebit: true } });
   const returned = await prisma.salesReturnItem.findMany({ where: { invoiceItemId: { in: inv.items.map((i) => i.id) }, return: { status: { not: 'CANCELLED' } } } });
@@ -186,7 +189,7 @@ async function detail(id: number) {
     it.returnableQty = r3(num(it.qty) - (retMap.get(it.id as number) ?? 0));
   }
   return {
-    ...row, items, salesOrder: so, delivery: dn, journals, ...money(inv), vatBase: r2(num(inv.vatAmount) * num(inv.exchangeRate)),
+    ...row, items, salesOrder: so, proforma, delivery: dn, journals, ...money(inv), vatBase: r2(num(inv.vatAmount) * num(inv.exchangeRate)),
     links: await docLinks('SALES_INVOICE', id), approval: await approvalFor('SALES_INVOICE', id),
   };
 }
@@ -299,19 +302,21 @@ fromProforma.post('/:id/create-invoice', can('sales_invoice', 'create'), ah(asyn
   const id = intParam(req);
   const b = parse(createSchema, req.body ?? {});
   const invId = await prisma.$transaction(async (tx) => {
+    // Bills what is delivered and not yet invoiced on the proforma's order (up to the ordered qty when
+    // sales.invoiceBeforeDelivery is on). Several partial invoices are allowed; INVOICED once everything is billed.
     const p = mustFound(await tx.proformaInvoice.findUnique({ where: { id } }), 'Proforma invoice');
-    mustStatus(p, ['ISSUED', 'CONVERTED'], 'create invoice');
-    if (!(await boolSetting('sales.invoiceBeforeDelivery', false, tx))) {
-      throw badRequest('Invoicing a proforma before delivery is disabled (setting sales.invoiceBeforeDelivery). Create the sales order, deliver, then invoice the delivery.');
-    }
-    const dup = await tx.salesInvoice.findFirst({ where: { proformaId: id, status: { not: 'CANCELLED' } } });
-    if (dup) throw conflict(`Proforma already invoiced on ${dup.docNo}`);
-    if (!p.salesOrderId) throw badRequest('Convert the proforma to a sales order first so that stock can be reserved/delivered, then invoice');
+    mustStatus(p, ['PARTIALLY_CONVERTED', 'CONVERTED'], 'create invoice (confirm the proforma first)');
+    if (!p.salesOrderId) throw badRequest('Confirm the proforma first');
     const so = await tx.salesOrder.findUniqueOrThrow({ where: { id: p.salesOrderId } });
-    mustStatus(so, LIVE_ORDER, `create invoice (sales order ${so.docNo} must be approved)`);
-    const rows = await rowsFromOrder(tx, so.id, null, true);
+    if (so.status === 'PENDING_APPROVAL') throw badRequest(`Proforma ${p.docNo} is waiting for approval`);
+    mustStatus(so, LIVE_ORDER, `create invoice for proforma ${p.docNo}`);
+    const allowPre = await boolSetting('sales.invoiceBeforeDelivery', false, tx);
+    const override = b.items?.length ? new Map(b.items.map((i) => [i.orderItemId ?? i.id!, i.qty])) : null;
+    const rows = await rowsFromOrder(tx, so.id, override, allowPre);
+    if (!rows.length) throw badRequest(`Nothing delivered and not yet invoiced on proforma ${p.docNo}`);
     const inv = await persistInvoice(tx, req, so.id, rows, { ...b, proformaId: p.id });
-    await tx.proformaInvoice.update({ where: { id }, data: { status: 'INVOICED' } });
+    const left = await tx.salesOrderItem.findMany({ where: { orderId: so.id }, select: { qty: true, invoicedQty: true } });
+    if (left.every((i) => num(i.invoicedQty) >= num(i.qty) - 0.0005)) await tx.proformaInvoice.update({ where: { id }, data: { status: 'INVOICED' } });
     await linkDocs(tx, { type: 'PROFORMA_INVOICE', id: p.id, no: p.docNo }, { type: 'SALES_INVOICE', id: inv.id, no: inv.docNo });
     return inv.id;
   }, { timeout: 30000 });
@@ -325,6 +330,8 @@ const editSchema = z.object({
   paymentTerms: z.string().optional().nullable(),
   roundOff: z.coerce.number().optional(),
   remarks: z.string().optional().nullable(),
+  /** Exempt VAT: every line 0% (reported as exempt); unticking restores each product's VAT rate */
+  vatExempt: z.boolean().optional(),
   items: z.array(z.object({ id: z.coerce.number().int(), qty: z.coerce.number().min(0).optional(), rate: z.coerce.number().min(0).optional(), discount: z.coerce.number().min(0).optional(), vatRate: z.coerce.number().min(0).optional() })).optional(),
 });
 router.put('/:id', can('sales_invoice', 'edit'), ah(async (req, res) => {
@@ -335,6 +342,9 @@ router.put('/:id', can('sales_invoice', 'edit'), ah(async (req, res) => {
     const inv = mustFound(await tx.salesInvoice.findUnique({ where: { id }, include: { items: true } }), 'Sales invoice');
     mustStatus(inv, ['DRAFT'], 'edit');
     const edits = new Map((b.items ?? []).map((e) => [e.id, e]));
+    const exempt = b.vatExempt ?? inv.vatExempt;
+    const unExempt = inv.vatExempt && b.vatExempt === false;
+    const prodVat = unExempt ? new Map((await tx.product.findMany({ where: { id: { in: inv.items.map((i) => i.productId) } }, select: { id: true, vatRate: true } })).map((p) => [p.id, num(p.vatRate)])) : null;
     const keep: typeof inv.items = [];
     const released: typeof inv.items = [];
     for (const it of inv.items) {
@@ -352,7 +362,7 @@ router.put('/:id', can('sales_invoice', 'edit'), ah(async (req, res) => {
         continue;
       }
       const rate = e?.rate ?? num(it.rate);
-      const vatRate = e?.vatRate ?? num(it.vatRate);
+      const vatRate = exempt ? 0 : (e?.vatRate ?? (prodVat ? prodVat.get(it.productId) ?? num(it.vatRate) : num(it.vatRate)));
       const discount = e?.discount ?? (qty !== num(it.qty) ? r2((num(it.discount) * qty) / num(it.qty)) : num(it.discount));
       const c = calcLine({ qty, rate, discount, vatRate });
       const upd = await tx.salesInvoiceItem.update({ where: { id: it.id }, data: { qty, rate, discount, vatRate, vatAmount: c.vatAmount, amount: c.amount } });
@@ -368,12 +378,12 @@ router.put('/:id', can('sales_invoice', 'edit'), ah(async (req, res) => {
       const cust = await tx.customer.findUniqueOrThrow({ where: { id: inv.customerId } });
       const term = await resolveTerm(tx, b.paymentTerms ?? inv.paymentTerms, cust.paymentTermId);
       paymentTerms = term.name;
-      if (!b.dueDate) dueDate = addDays(docDate, term.days);
+      if (!b.dueDate) dueDate = dueDateFor(docDate, term);
     }
     await tx.salesInvoice.update({
       where: { id },
       data: {
-        docDate, dueDate, paymentTerms, remarks: b.remarks !== undefined ? b.remarks : inv.remarks, subtotal: totals.subtotal, discount: totals.discount, vatAmount: totals.vatAmount,
+        docDate, dueDate, paymentTerms, vatExempt: exempt, remarks: b.remarks !== undefined ? b.remarks : inv.remarks, subtotal: totals.subtotal, discount: totals.discount, vatAmount: totals.vatAmount,
         roundOff: totals.roundOff, total: totals.total, baseTotal: r2(totals.total * num(inv.exchangeRate)),
       },
     });

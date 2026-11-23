@@ -119,7 +119,7 @@ export async function postStock(tx: Tx, i: PostStockInput) {
     data: { onHand: r3(onHand + i.qty), avgCost: newAvg },
   });
   if (i.qty > 0 && i.txType === 'PURCHASE_RECEIPT') {
-    await tx.product.update({ where: { id: i.productId }, data: { lastPurchasePrice: unitCost } });
+    await tx.product.update({ where: { id: i.productId }, data: { lastPurchasePrice: unitCost, lastPurchaseAt: i.date ?? new Date() } });
   }
   await refreshProductAvgCost(tx, i.productId);
   return row;

@@ -304,12 +304,21 @@ const companySchema = z.object({
     .or(z.literal('').transform(() => null)),
   country: opt,
   baseCurrency: z.string().trim().min(2).max(10).optional(),
+  tagline: z.string().trim().max(60).nullish().or(z.literal('').transform(() => null)),
+  // logo as an image data URL; the client resizes it before upload, so 600 KB is generous
+  logo: z
+    .string()
+    .max(600_000, 'Logo is too large (max ~400 KB)')
+    .regex(/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/, 'Logo must be a PNG, JPG, WEBP or SVG image')
+    .nullish()
+    .or(z.literal('')),
   isActive: z.boolean().optional(),
 });
 
 export default [
   { path: '/company', router: crudRouter({ model: 'company', permission: PERM, searchFields: ['code', 'name'], schema: companySchema, filters: ['isActive'] }) },
-  { path: '/business-units', router: simpleCrud('businessUnit', simple) },
+  // optional legal name / address / TRN print on this BU's documents (else the Company details)
+  { path: '/business-units', router: simpleCrud('businessUnit', simple.extend({ legalName: opt, address: opt, trn: opt })) },
   { path: '/branches', router: simpleCrud('branch', simple.extend({ address: opt })) },
   { path: '/warehouses', router: warehouseRouter },
   { path: '/warehouse-locations', router: locationRouter },
@@ -324,7 +333,7 @@ export default [
   },
   { path: '/territories', router: simpleCrud('territory', simple) },
   { path: '/units', router: simpleCrud('unit', simple) },
-  { path: '/payment-terms', router: simpleCrud('paymentTerm', simple.extend({ days: z.coerce.number().int().min(0).default(0) })) },
+  { path: '/payment-terms', router: simpleCrud('paymentTerm', simple.extend({ days: z.coerce.number().int().min(0).default(0), basis: z.enum(['INVOICE_DATE', 'NEXT_MONTH']).default('INVOICE_DATE') })) },
   { path: '/currencies', router: flagCrud('currency', 'isBase', currencySchema, ['code', 'name']) },
   { path: '/vat-codes', router: flagCrud('vatCode', 'isDefault', vatSchema, ['code', 'name']) },
 ] satisfies ModuleDef[];

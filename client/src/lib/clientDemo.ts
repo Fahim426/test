@@ -1,6 +1,7 @@
-﻿import type { DriveStep, Driver } from 'driver.js';
+import type { DriveStep, Driver } from 'driver.js';
 import { api } from '@/lib/api';
 import { useAuth, hasPermission } from '@/store/auth';
+import { useBuStore } from '@/store/bu';
 import { useWorkspaceStore } from '@/store/workspace';
 import { getScreen } from '@/screens/registry';
 import { screenEnabled, type ProductConfig } from '@/hooks/useProductConfig';
@@ -24,6 +25,9 @@ const CHAPTERS = [
   'Machine & AMC',
   'Management control',
   'Staff & setup',
+  'Workspace navigation',
+  'Pending work & sales targets',
+  'Business units & e-invoicing',
 ];
 const esc = (v: unknown) =>
   String(v ?? '').replace(
@@ -53,7 +57,7 @@ export async function startClientDemo() {
     tour: Driver | undefined,
     ticket = 0,
     busy = false;
-  const reportKeys = ['rpt.params.branch-performance', 'rpt.params.gross-profit'];
+  const reportKeys = ['rpt.params.branch-performance', 'rpt.params.gross-profit', 'rpt.params.salesman-incentive', 'rpt.params.sales-register'];
   const reportState = new Map<string, string | null>();
   for (const key of reportKeys)
     try {
@@ -61,7 +65,10 @@ export async function startClientDemo() {
     } catch {}
   let unsubscribe = () => {};
   const guard = api.interceptors.request.use((cfg) => {
-    if (!['get', 'head', 'options'].includes((cfg.method || 'get').toLowerCase()))
+    const method = (cfg.method || 'get').toLowerCase();
+    const endpoint = (cfg.url || '').split('?')[0].replace(/^\/api(?=\/)/, '');
+    const readOnlyPost = method === 'post' && ['/assistant/message', '/export/rows'].includes(endpoint);
+    if (!['get', 'head', 'options'].includes(method) && !readOnlyPost)
       return Promise.reject(new Error('Client Demo is read-only. Exit the demo before saving or changing records.'));
     return cfg;
   });
@@ -95,11 +102,16 @@ export async function startClientDemo() {
   };
   endCurrent = exit;
   const identity = (u: typeof user | null) =>
-    u ? [u.id, u.role, u.branchId ?? '', ...u.permissions.slice().sort()].join('|') : '';
+    u ? [u.id, u.role, u.branchId ?? '', u.businessUnitId ?? '', ...u.permissions.slice().sort()].join('|') : '';
   const initialIdentity = identity(user);
-  unsubscribe = useAuth.subscribe((s) => {
+  const initialBusinessUnit = useBuStore.getState().selectedBuId;
+  const unsubscribeAuth = useAuth.subscribe((s) => {
     if (identity(s.user) !== initialIdentity) exit();
   });
+  const unsubscribeBusinessUnit = useBuStore.subscribe((s) => {
+    if (s.selectedBuId !== initialBusinessUnit) exit();
+  });
+  unsubscribe = () => { unsubscribeAuth(); unsubscribeBusinessUnit(); };
   const destroy = () => {
     if (!replacing) cleanup();
   };
@@ -187,9 +199,9 @@ export async function startClientDemo() {
         chapter: 'Welcome',
         title: 'Client Demo: the business story',
         body:
-          'A guided, 20-25 minute presentation for ' +
+          'A full walkthrough of around 30 minutes for ' +
           esc(config.company?.name || config.appName) +
-          '. Choose a chapter to jump straight to a question. <b>Only existing screens and saved records are opened; no business data is created, posted, paid or changed.</b><br><br>' +
+          '. Use the chapter menu for a shorter presentation or to jump straight to a question. <b>Only existing screens and saved records are opened; no business data is created, posted, paid or changed.</b><br><br>' +
           (status.active
             ? 'Figures and customer names belong to the fictional demonstration dataset.'
             : 'No seeded demo dataset is installed here. Examples are omitted; only permitted screens will be shown.') +
@@ -236,6 +248,7 @@ export async function startClientDemo() {
       );
     };
     const preset = { preset: { from: '2026-10-20', to: '2026-11-19' } };
+    const modernWorkspace = !!target('workspace-modern');
     add(
       0,
       'ERP: one connected workspace',
@@ -248,6 +261,31 @@ export async function startClientDemo() {
       'Review sales and purchases, customer receivables, supplier payables, stock value and pending work. Check the selected period and VAT basis before comparing two amounts. Due-date reminders and today-based cards can change as the calendar moves.',
       'dashboard',
     );
+    add(
+      6,
+      'Navigate with the left tree',
+      'Expand a module, then choose its screen. Sales, purchasing, stock, accounts, HR and AMC share the same workspace. The arrow beside the company name collapses the tree to an icon rail; an icon opens its screen choices. On a phone, the navigation button opens the drawer.',
+      undefined, undefined, target('tree') ? 'tree' : target('tree-mobile-toggle') ? 'tree-mobile-toggle' : 'tree-toggle',
+    );
+    add(
+      6,
+      'Choose the navigation layout',
+      'The panel button in the top bar switches between the left tree and the top module ribbon. Staff can choose the layout that suits their work. The selected layout is saved on this browser.',
+      undefined, undefined, 'tree-toggle',
+    );
+    add(
+      6,
+      'Manage related screens as tabs',
+      'Keep a customer, quotation, delivery and invoice open together. Pin frequent screens, drag tabs into a useful order, and use the close controls when finished. Read the confirmation before closing work with unsaved changes.',
+      undefined, undefined, 'tabs',
+    );
+    if (modernWorkspace)
+      add(
+        6,
+        'Check a machine price quickly',
+        'Use Price Check to search a product code, machine name or brand. Review the selling prices, recorded costs and stock, then open the product for the full record. Filters help narrow a larger catalogue.',
+        'dashboard', undefined, 'demo-price-check',
+      );
     record(
       1,
       'Identify the machine',
@@ -300,6 +338,12 @@ export async function startClientDemo() {
       undefined,
       'stock',
     );
+    add(
+      1,
+      'Find products and review purchase history',
+      'The product list includes the stock number, average cost, last purchase price and last purchase date. Search and filter the catalogue to find the right machine. Product codes identify models; serial numbers identify individual units.',
+      'products',
+    );
     record(
       1,
       'Order from the supplier',
@@ -350,6 +394,12 @@ export async function startClientDemo() {
       'sales-quotation-form',
       'sales-quotations',
       quotation,
+    );
+    add(
+      2,
+      'Use a proforma when the deal needs one',
+      'A proforma presents the proposed customer bill. Confirm Order creates the linked sales order and follows the approval and stock-reservation process. The confirmed proforma provides actions to continue to delivery and invoicing. The saved sale in this presentation also demonstrates the sales-order route.',
+      'proforma-invoices',
     );
     record(
       2,
@@ -422,6 +472,12 @@ export async function startClientDemo() {
       invoice,
       'demo-document-totals',
     );
+    add(
+      2,
+      'Review VAT treatment before posting',
+      'The invoice supports an Exempt VAT option for applicable transactions. It sets the invoice lines to zero VAT. Confirm the tax treatment with the accountant when configuring the business process. This walkthrough displays saved invoices.',
+      'sales-invoices',
+    );
     record(
       2,
       'Link the customer payment',
@@ -479,6 +535,30 @@ export async function startClientDemo() {
       'reminder-centre',
     );
     add(
+      7,
+      'See what is still waiting',
+      'Pending Items follows quantities through sales, purchasing and import stages. For example, if an order contains ten units and four have reached the next stage, six remain pending. Review the source document, quantities already carried forward and the remaining quantity.',
+      'pending-items',
+    );
+    record(
+      7,
+      'Resolve outstanding quantities with a reason',
+      'A document can show its pending quantities beside Document Flow. Staff can carry them into the next document or close a remaining quantity with a reason, such as a customer cancellation. An authorised user can reopen the closure. Closing a pending quantity updates workflow tracking.',
+      'sales-order-form', 'sales-orders', order,
+    );
+    add(
+      7,
+      'Set salesperson targets and incentive slabs',
+      'Choose a month and review each salesperson’s target. Default targets can continue into later months, with a monthly override where needed. Incentive slabs link achievement to a percentage of gross profit. Management chooses the targets and rates.',
+      'sales-targets',
+    );
+    add(
+      7,
+      'Review the calculated sales incentive',
+      'Compare sales, posted returns, net sales, cost, gross profit, target achievement and the resulting incentive. The reached achievement slab determines the percentage applied to gross profit. Review the month and the saved targets before approving a payout.',
+      'salesman-incentive', examples ? { preset: { from: '2026-11-01', to: '2026-11-30' } } : undefined,
+    );
+    add(
       4,
       'Compare the branches',
       'Compare sales before VAT, recorded cost, gross profit and margin for the prepared period 20 Oct-19 Nov 2026. A higher sales total does not automatically mean a higher margin. Stock valuation is a current snapshot, independent of the sales date range.',
@@ -491,6 +571,18 @@ export async function startClientDemo() {
       'Gross profit is revenue less recorded cost of goods sold. It is before overheads. Review the date range, source documents and return treatment when reconciling reports.',
       'gross-profit',
       preset,
+    );
+    add(
+      4,
+      'Follow a customer or supplier ledger',
+      'Use the customer or supplier filters to inspect opening balance, debits, credits and closing balance. The linked-ledger controls on supported profile screens provide a shortcut to the same account history.',
+      'general-ledger',
+    );
+    add(
+      4,
+      'Export a report for management',
+      'The Export menu offers PDF, Excel, CSV and Word. Word provides an editable report table. Check the report filters and VAT basis before sharing the figures.',
+      'sales-register', examples ? preset : undefined, 'demo-report-export',
     );
     record(
       4,
@@ -528,11 +620,41 @@ export async function startClientDemo() {
       undefined,
       'demo-company-modules',
     );
+    add(
+      5,
+      'Set clear payment terms',
+      'Payment terms can count days from the invoice date or from the first day of the following month. For example, thirty days from 1 December gives a due date of 31 December. The agreed term helps accounts follow up the correct due date.',
+      'payment-terms',
+    );
+    add(
+      5,
+      'Keep company branding consistent',
+      'Company Branding provides the company name, subtitle, logo upload and light/dark previews. The logo is shared with the workspace, login branding and newly generated documents. Archived issued invoices retain their saved appearance.',
+      'company-branding',
+    );
+    add(
+      8,
+      'Separate business units',
+      'A business unit represents a division within the company. Administrators can select one unit or review consolidated records; other employees work within their assigned unit. Branches and warehouses continue to identify locations, and the product stock is shared across business units. Changing the unit during this walkthrough ends the demo so its examples stay consistent.',
+      'business-units',
+    );
+    add(
+      8,
+      'Review the current business-unit view',
+      'The top-bar selector shows the current business unit. New documents use the chosen unit or the unit of their source document. When an administrator is viewing All BUs, a new document asks which unit it belongs to. Separate numbering and legal details can be configured for each unit.',
+      undefined, undefined, 'demo-business-unit',
+    );
+    add(
+      8,
+      'Understand the e-invoicing workspace',
+      'Review eligible invoices, the submission queue, XML preview, statuses and logs. Sandbox mode simulates processing for demonstration. Production submission requires an implemented adapter for the selected service provider. This walkthrough opens the overview.',
+      'einvoice',
+    );
     if (config.features.assistant)
       add(
         5,
         'Ask a business question',
-        'The ERP assistant answers supported questions in plain English, such as "Who owes us money?" or "Sales in Dubai this month?" It is rule-based and read-only, with role/branch checks. This presentation highlights it without sending a question or feedback.',
+        'The ERP assistant answers supported questions in plain English, such as "Who owes us money?" or "Sales in Dubai this month?" It is rule-based and read-only, with role, branch and business-unit checks. Each question stands independently. Minimise the guide to open the assistant and ask a supported question; answers include their source and filters.',
         undefined,
         undefined,
         'assistant',
@@ -544,6 +666,7 @@ export async function startClientDemo() {
     });
     const steps: DriveStep[] = scenes.map((scene) => ({
       element: scene.screen || scene.focus ? () => targetFor(scene) ?? (undefined as unknown as Element) : undefined,
+      ...(scene.focus === 'assistant' ? { disableActiveInteraction: false } : {}),
       popover: { title: esc(scene.title), description: scene.body, side: 'left', align: 'center' },
     }));
     const screenTarget = (scene: Scene) => (scene.screen ? target('screen-' + scene.screen) : undefined);
@@ -551,7 +674,7 @@ export async function startClientDemo() {
       const screen = screenTarget(scene);
       return scene.focus ? (target(scene.focus, screen ?? document) ?? screen) : screen;
     }
-    const chapters = CHAPTERS.filter((c) => scenes.some((s) => s.chapter === c));
+    const chapters = [...new Set(scenes.filter(s => s.chapter !== 'Welcome' && s.chapter !== 'Finish').map(s => s.chapter))];
     const first = (chapter: string) => scenes.findIndex((s) => s.chapter === chapter);
     const go = async (index: number) => {
       if (ended || busy) return;
@@ -609,6 +732,7 @@ export async function startClientDemo() {
     replacing = false;
     tour = makeTour(steps, 'Client Demo', {
       popoverClass: 'ss-tour ss-client-demo',
+      allowedElements: ['[data-tour="assistant"]', '[aria-label="ERP assistant"]'],
       onNextClick: () => void go((tour?.getActiveIndex() ?? 0) + 1),
       onPrevClick: () => void go((tour?.getActiveIndex() ?? 0) - 1),
       onDestroyed: destroy,

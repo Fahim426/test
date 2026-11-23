@@ -28,7 +28,7 @@ const EnquiriesList = makeSalesList<AnyRec>({
   formScreen: 'sales-enquiry-form',
   permission: 'sales_enquiry',
   newLabel: 'New Enquiry',
-  statuses: ['OPEN', 'QUOTED', 'CLOSED', 'CANCELLED'],
+  statuses: ['OPEN', 'PARTIALLY_QUOTED', 'QUOTED', 'CLOSED', 'CANCELLED'],
   columns: [
     { key: 'docNo', header: 'Enquiry No', width: 130, filter: 'text' },
     { key: 'docDate', header: 'Date', type: 'date', width: 100 },
@@ -126,18 +126,18 @@ function EnquiryForm({ params, tabId }: ScreenProps) {
             <DocAction icon={Save} variant="primary" hidden={!editable} loading={doc.saving} onClick={save}>Save</DocAction>
             <DocAction
               icon={FilePlus2}
-              hidden={doc.isNew || !['OPEN', 'QUOTED'].includes(status ?? '') || !can('sales_quotation', 'create')}
+              hidden={doc.isNew || !['OPEN', 'QUOTED', 'PARTIALLY_QUOTED'].includes(status ?? '') || !can('sales_quotation', 'create')}
               loading={act.busy === 'create-quotation'}
               onClick={() => act.convert('create-quotation', 'sales-quotation-form', 'Quotation created')}
             >
               Create Quotation
             </DocAction>
             <DocActionSep />
-            <DocAction icon={Lock} hidden={doc.isNew || !['OPEN', 'QUOTED'].includes(status ?? '')} loading={act.busy === 'close'} onClick={() => act.post('close', {}, 'Enquiry closed')}>Close</DocAction>
+            <DocAction icon={Lock} hidden={doc.isNew || !['OPEN', 'QUOTED', 'PARTIALLY_QUOTED'].includes(status ?? '')} loading={act.busy === 'close'} onClick={() => act.post('close', {}, 'Enquiry closed')}>Close</DocAction>
             <DocAction icon={RotateCcw} hidden={doc.isNew || !['CLOSED', 'CANCELLED'].includes(status ?? '')} loading={act.busy === 'reopen'} onClick={() => act.post('reopen', {}, 'Enquiry reopened')}>Reopen</DocAction>
             <DocAction
               icon={XCircle}
-              hidden={doc.isNew || !['OPEN', 'QUOTED'].includes(status ?? '') || !can('sales_enquiry', 'cancel')}
+              hidden={doc.isNew || !['OPEN', 'QUOTED', 'PARTIALLY_QUOTED'].includes(status ?? '') || !can('sales_enquiry', 'cancel')}
               loading={act.busy === 'cancel'}
               onClick={async () => (await confirm.ask('Cancel this enquiry?', { danger: true, confirmLabel: 'Cancel enquiry' })) && act.post('cancel', {}, 'Enquiry cancelled')}
             >

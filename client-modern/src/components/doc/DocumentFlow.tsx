@@ -1,12 +1,12 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formScreenOf } from '@/lib/docRoutes';
 import { useWorkspaceStore } from '@/store/workspace';
 import { StatusBadge } from '@/components/ui';
-import { DocSection } from './DocumentLayout';
 import { cn } from '@/lib/cn';
+import { PendingNote } from './PendingNote';
 
 export interface FlowDoc {
   type?: string;
@@ -63,6 +63,7 @@ function DocChip({ d, fallbackType }: { d: FlowDoc; fallbackType?: string }) {
  */
 export function DocumentFlow({ docType, docId }: { docType: string; docId?: number | string }) {
   const openDoc = useOpenDoc();
+  const [more, setMore] = useState(false);
   const q = useQuery({
     queryKey: ['doc-flow', docType, docId],
     enabled: !!docId,
@@ -81,46 +82,56 @@ export function DocumentFlow({ docType, docId }: { docType: string; docId?: numb
       </div>
     ) : null;
 
+  const count = (d?.createdFrom?.length ?? 0) + (d?.convertedTo?.length ?? 0) + (d?.related?.length ?? 0);
+  // compact one-line strip: small step pills joined by arrows; related documents fold out below
   return (
-    <DocSection title={`Document Flow${chain ? ` · ${chain.label}` : ''}`} bodyClassName="p-5 pt-3">
-      {q.isLoading && <div className="skeleton h-14 w-full" />}
-      {q.isError && <div className="text-[13px] text-ink-muted">Document flow is not available.</div>}
-      {stages.length > 0 && (
-        <div className="flex items-start overflow-x-auto pb-3">
+    <>
+    <PendingNote docType={docType} docId={docId} />
+    <section className="rounded-card border border-line bg-surface px-3 py-1.5 shadow-card">
+      <div className="flex min-h-[30px] items-center gap-2">
+        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">{chain?.label ? `Flow · ${chain.label}` : 'Flow'}</span>
+        {q.isLoading && <div className="skeleton h-5 flex-1" />}
+        {q.isError && <span className="text-xs text-ink-muted">Not available</span>}
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {stages.map((s, i) => {
             const first = s.docs[0];
             return (
               <Fragment key={`${s.key ?? s.type ?? s.label}-${i}`}>
-                {i > 0 && <span className={cn('mt-[15px] h-0.5 min-w-[28px] flex-1 rounded-full', stages[i - 1].state === 'done' ? 'bg-success' : 'bg-line-strong')} />}
+                {i > 0 && <ChevronRight size={13} className={cn('shrink-0', stages[i - 1].state === 'done' ? 'text-success' : 'text-ink-faint')} />}
                 <button
                   disabled={!first || s.state === 'current'}
                   onClick={() => first && openDoc(first, s.type)}
                   title={s.docs.map((x) => x.no).join(', ') || 'Not created yet'}
-                  className="group flex min-w-[88px] flex-col items-center gap-1 px-1 text-center disabled:cursor-default"
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[12px] transition disabled:cursor-default',
+                    s.state === 'done' && 'border-success/30 bg-success-soft text-ink hover:border-success',
+                    s.state === 'current' && 'border-brand/40 bg-brand-soft font-semibold text-brand-ink',
+                    s.state === 'pending' && 'border-line bg-surface text-ink-faint',
+                  )}
                 >
-                  <span
-                    className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-full border-2 text-[13px] font-semibold transition',
-                      s.state === 'done' && 'border-success bg-success text-white group-hover:brightness-95 dark:text-[#0c0d14]',
-                      s.state === 'current' && 'border-brand bg-brand-soft text-brand ring-4 ring-brand/15',
-                      s.state === 'pending' && 'border-line-strong bg-surface text-ink-faint',
-                    )}
-                  >
-                    {icon[s.state]}
-                  </span>
-                  <span className={cn('text-[13px]', s.state === 'current' ? 'font-semibold text-ink' : s.state === 'done' ? 'font-medium text-ink' : 'text-ink-faint')}>{s.label}</span>
-                  <span className="max-w-[110px] truncate text-[11px] text-ink-faint">{s.docs.length > 1 ? `${s.docs.length} docs` : (first?.no ?? '')}</span>
+                  <span className={cn('text-[11px] leading-none', s.state === 'done' ? 'text-success' : s.state === 'current' ? 'text-brand' : 'text-ink-faint')}>{icon[s.state]}</span>
+                  <span>{s.label}</span>
+                  {s.docs.length > 1 ? <span className="text-[11px] text-ink-faint">×{s.docs.length}</span> : first?.no && s.state !== 'current' ? <span className="max-w-[110px] truncate text-[11px] text-ink-faint">{first.no}</span> : null}
                 </button>
               </Fragment>
             );
           })}
         </div>
-      )}
-      <div className="flex flex-col gap-2.5">
-        <Group title="Created From" docs={d?.createdFrom} />
-        <Group title="Converted To" docs={d?.convertedTo} />
-        <Group title="Related Documents" docs={d?.related} />
+        {count > 0 && (
+          <button type="button" onClick={() => setMore((v) => !v)} aria-expanded={more} className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-brand hover:underline">
+            {more ? 'Less' : `Related (${count})`}
+            <ChevronDown size={13} className={cn('transition-transform', more && 'rotate-180')} />
+          </button>
+        )}
       </div>
-    </DocSection>
+      {more && (
+        <div className="mb-1 mt-2 flex flex-col gap-2 border-t border-line pt-2">
+          <Group title="Created From" docs={d?.createdFrom} />
+          <Group title="Converted To" docs={d?.convertedTo} />
+          <Group title="Related Documents" docs={d?.related} />
+        </div>
+      )}
+    </section>
+    </>
   );
 }

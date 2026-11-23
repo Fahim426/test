@@ -267,7 +267,7 @@ function toRecords<T>(cfg: ExportCfg<T>, forPrint: boolean): Record<string, unkn
 }
 
 /** POST /api/export/report -> blob download (csv | xlsx | pdf) */
-export async function exportReport<T>(cfg: ExportCfg<T>, format: 'csv' | 'xlsx' | 'pdf') {
+export async function exportReport<T>(cfg: ExportCfg<T>, format: 'csv' | 'xlsx' | 'pdf' | 'docx') {
   try {
     const cols = (cfg.columns as RCol<unknown>[]).map((c) => ({
       key: c.key,
@@ -345,9 +345,9 @@ export function ExportMenu<T>({ cfg, disabled }: { cfg: ExportCfg<T> | null; dis
       </Button>
       {open && cfg && (
         <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-xl border border-line bg-surface p-1 text-[13px] shadow-pop">
-          {(['csv', 'xlsx', 'pdf'] as const).map((f) => (
+          {(['csv', 'xlsx', 'pdf', 'docx'] as const).map((f) => (
             <button key={f} className="block w-full rounded-lg px-3 py-1.5 text-left text-ink hover:bg-brand-soft" onClick={() => exportReport(cfg, f)}>
-              {f === 'xlsx' ? 'Excel (.xlsx)' : f === 'csv' ? 'CSV' : 'PDF'}
+              {f === 'xlsx' ? 'Excel (.xlsx)' : f === 'csv' ? 'CSV' : f === 'docx' ? 'Word (.docx)' : 'PDF'}
             </button>
           ))}
         </div>

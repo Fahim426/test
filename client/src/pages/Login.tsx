@@ -33,7 +33,7 @@ export default function Login() {
   });
 
   return (
-    <div className="flex h-full items-center justify-center bg-app-bg">
+    <div className="flex h-full flex-col items-center justify-center bg-app-bg">
       <div className="w-[380px] border border-app-border bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-brand-dark bg-brand px-4 py-3 text-white">
           <CompanyLogo className="h-16 w-40" />
@@ -70,6 +70,9 @@ export default function Login() {
             </a>
           </span>
         </div>
+      </div>
+      <div className="mt-3 text-center text-[11px] text-slate-500">
+        Powered by <span className="font-semibold text-slate-700">SmartFlix Technologies</span>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prisma } from '../lib/prisma';
+import { prisma, partNumberProductIds } from '../lib/prisma';
 import { ah, listQuery, paged } from '../lib/http';
 import { badRequest } from '../lib/errors';
 import { can } from '../middleware/auth';
@@ -11,7 +11,7 @@ import type { ModuleDef } from '../app';
 
 const router = Router();
 
-function balanceWhere(q: Record<string, unknown>) {
+async function balanceWhere(q: Record<string, unknown>) {
   const productWhere: Record<string, unknown> = {};
   const brandId = qInt(q.brandId ?? q.brand);
   const categoryId = qInt(q.categoryId ?? q.category);
@@ -24,7 +24,7 @@ function balanceWhere(q: Record<string, unknown>) {
       { name: { contains: search } },
       { oemNumber: { contains: search } },
       { barcode: { contains: search } },
-      { partNumbers: { some: { number: { contains: search } } } },
+      ...((await partNumberProductIds(search)).map((id) => ({ id }))),
     ];
   }
   const where: Record<string, unknown> = {};
@@ -63,7 +63,7 @@ router.get(
   can('stock', 'view'),
   ah(async (req, res) => {
     const q = listQuery(req);
-    const where = balanceWhere(req.query);
+    const where = await balanceWhere(req.query);
     const hideZero = req.query.includeZero !== '1' && req.query.includeZero !== 'true';
     if (hideZero) where.OR = [{ onHand: { not: 0 } }, { reserved: { not: 0 } }];
     const lowOnly = req.query.lowStockOnly === '1' || req.query.lowStockOnly === 'true';
@@ -109,7 +109,7 @@ router.get(
   can('stock', 'view'),
   ah(async (req, res) => {
     const q = listQuery(req);
-    const where = balanceWhere(req.query);
+    const where = await balanceWhere(req.query);
     const all = await prisma.stockBalance.findMany({ where, include: { product: { select: productSelect } } });
     const map = new Map<number, { product: (typeof all)[number]['product']; onHand: number; reserved: number; value: number; warehouses: number }>();
     for (const b of all) {
@@ -235,7 +235,7 @@ router.get(
   can('stock', 'view'),
   ah(async (req, res) => {
     const q = listQuery(req);
-    const where = { ...balanceWhere(req.query), onHand: { not: 0 } };
+    const where = { ...(await balanceWhere(req.query)), onHand: { not: 0 } };
     const all = await prisma.stockBalance.findMany({
       where,
       include: { product: { select: { id: true, code: true, name: true, brand: { select: { name: true } }, category: { select: { name: true } } } } },

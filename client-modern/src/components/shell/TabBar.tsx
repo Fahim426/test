@@ -1,5 +1,5 @@
 import { MouseEvent, useEffect, useRef, useState } from 'react';
-import { XCircle, Pin, RotateCcw, Star, X, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { MinusCircle, Pin, RotateCcw, Star, X, XCircle, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { Tab, useWorkspaceStore } from '@/store/workspace';
 import { getScreen } from '@/screens/registry';
 import { useFavorites, encodeRoute } from '@/hooks/useFavorites';
@@ -60,7 +60,8 @@ function ContextMenu({ menu, onClose }: { menu: Menu; onClose: () => void }) {
 const barBtn = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-3 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent';
 
 export function TabBar() {
-  const { tabs, activeId, closed, activate, close, reopenLast, togglePin, move } = useWorkspaceStore();
+  const { tabs, activeId, closed, activate, close, reopenLast, togglePin, move, closeAll, closeOthers } = useWorkspaceStore();
+  const askDirty = (list: typeof tabs) => !list.some((t) => t.dirty) || window.confirm('Some open windows have unsaved changes. Close them anyway?');
   const [menu, setMenu] = useState<Menu | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const dragFrom = useRef<number | null>(null);
@@ -78,7 +79,7 @@ export function TabBar() {
   const scrollBy = (d: number) => scroller.current?.scrollBy({ left: d, behavior: 'smooth' });
 
   return (
-    <div className="no-print flex h-12 shrink-0 items-center gap-1 border-b border-line bg-canvas px-3">
+    <div data-tour="tabs" className="no-print flex h-12 shrink-0 items-center gap-1 border-b border-line bg-canvas px-3">
       <button className={barBtn} onClick={() => scrollBy(-250)} title="Scroll tabs left">
         <ChevronLeft size={15} />
       </button>
@@ -94,6 +95,7 @@ export function TabBar() {
             <div
               key={t.id}
               data-tab={t.id}
+              data-tour={on ? 'active-tab' : undefined}
               draggable
               onDragStart={() => (dragFrom.current = idx)}
               onDragOver={(e) => e.preventDefault()}
@@ -159,6 +161,22 @@ export function TabBar() {
         </button>
         <button disabled={!active} onClick={() => active && togglePin(active.id)} title={active?.pinned ? 'Unpin tab' : 'Pin tab'} className={barBtn}>
           <Pin size={15} className={active?.pinned ? 'text-brand' : ''} />
+        </button>
+        <button
+          disabled={tabs.filter((t) => t.id !== activeId && !t.pinned).length === 0}
+          onClick={() => active && askDirty(tabs.filter((t) => t.id !== active.id && !t.pinned)) && closeOthers(active.id)}
+          title="Close all other windows (pinned tabs stay)"
+          className={barBtn}
+        >
+          <MinusCircle size={15} />
+        </button>
+        <button
+          disabled={tabs.filter((t) => !t.pinned).length === 0}
+          onClick={() => askDirty(tabs.filter((t) => !t.pinned)) && closeAll()}
+          title="Close all windows (pinned tabs stay)"
+          className={barBtn}
+        >
+          <XCircle size={15} />
         </button>
         <button disabled={closed.length === 0} onClick={reopenLast} title="Reopen recently closed tab (Ctrl+Shift+T)" className={barBtn}>
           <RotateCcw size={15} />

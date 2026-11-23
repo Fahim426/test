@@ -32,7 +32,7 @@ const GROUPS: { label: string; modules: string[] }[] = [
     label: 'Purchase',
     modules: ['material_request', 'purchase_requisition', 'purchase_enquiry', 'supplier_quotation', 'comparative_statement', 'purchase_order', 'import_purchase', 'goods_receipt', 'landed_cost', 'purchase_invoice', 'purchase_return'],
   },
-  { label: 'Sales', modules: ['sales_enquiry', 'sales_quotation', 'proforma_invoice', 'sales_order', 'picking', 'packing', 'delivery_note', 'sales_invoice', 'sales_return'] },
+  { label: 'Sales', modules: ['sales_enquiry', 'sales_quotation', 'proforma_invoice', 'sales_order', 'picking', 'packing', 'delivery_note', 'sales_invoice', 'sales_return', 'sales_incentive'] },
   { label: 'Inventory', modules: ['stock', 'stock_transfer', 'stock_adjustment'] },
   { label: 'Finance', modules: ['chart_of_accounts', 'receipts', 'payments', 'journal', 'notes', 'ledger', 'vat'] },
   { label: 'Reports', modules: ['reports', 'report_builder'] },
@@ -55,6 +55,7 @@ const LABELS: Record<string, string> = {
   numbering: 'Document Numbering',
   approvals: 'Approval Workflows',
   settings: 'System Settings',
+  sales_incentive: 'Sales Targets & Incentive',
 };
 const label = (m: string) => LABELS[m] ?? m.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 const aLabel = (a: string) => a.charAt(0).toUpperCase() + a.slice(1);

@@ -4,6 +4,8 @@ import {
   ReportDef, ReportParams, Row, col, P, dateRange, iso, VALID_SALES, loadLookups, Lookups, productFilterIds, warehouseFilterIds,
   pName, pCode, brandName, catName, sumCols, roundRows, pct, periodKey, Col,
 } from './report-types';
+import { badRequest } from '../lib/errors';
+import { loadSlabs, loadTargets, periodOf, periodsBetween, rateFor } from './sales-incentive';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
@@ -316,6 +318,103 @@ const salesmanSales: ReportDef = {
   },
 };
 
+// ---------------- Salesman incentive: target achievement -> % of gross profit ----------------
+const salesmanIncentive: ReportDef = {
+  key: 'salesman-incentive',
+  title: 'Salesman Incentive',
+  group: 'Sales',
+  description:
+    'Per salesman and month: net sales (after posted returns) against the monthly target. The achievement slab reached sets the % of gross profit paid as incentive. Without dates, shows the current month.',
+  params: [P.from, P.to, P.salesman],
+  columns: [
+    col('month', 'Month'),
+    col('salesman', 'Salesman'),
+    col('sales', 'Sales', 'money', true),
+    col('returns', 'Returns', 'money', true),
+    col('net', 'Net Sales', 'money', true),
+    col('cost', 'Cost', 'money', true),
+    col('profit', 'Gross Profit', 'money', true),
+    col('margin', 'GP %', 'percent'),
+    col('target', 'Target', 'money', true),
+    col('achievement', 'Achieved %', 'percent'),
+    col('ratePct', 'Incentive %', 'percent'),
+    col('incentive', 'Incentive', 'money', true),
+  ],
+  async run(p) {
+    const now = new Date();
+    const from = p.from ?? (p.to ? new Date(p.to.getFullYear(), p.to.getMonth(), 1) : new Date(now.getFullYear(), now.getMonth(), 1));
+    const to = p.to ?? new Date(from.getFullYear(), from.getMonth() + 1, 0, 23, 59, 59, 999);
+    if (to < from) throw badRequest('To date is before From date');
+    const periods = periodsBetween(from, to);
+
+    const [{ lines, L }, slabs, T] = await Promise.all([loadSales({ ...p, from, to }), loadSlabs(), loadTargets(periods, p.salesmanId)]);
+
+    interface Bucket { period: string; sid: number | null; sales: number; salesCost: number; returns: number; returnCost: number }
+    const buckets = new Map<string, Bucket>();
+    const bucket = (period: string, sid: number | null) => {
+      const k = `${period}|${sid ?? 0}`;
+      let b = buckets.get(k);
+      if (!b) buckets.set(k, (b = { period, sid, sales: 0, salesCost: 0, returns: 0, returnCost: 0 }));
+      return b;
+    };
+    for (const l of lines) {
+      const b = bucket(periodOf(new Date(l.inv.docDate)), l.inv.salesmanId ?? null);
+      b.sales += l.net;
+      b.salesCost += l.cost;
+    }
+
+    // Posted returns count against the invoice's salesman in the month they are posted
+    const rets = await prisma.salesReturn.findMany({ where: { status: 'POSTED', docDate: { gte: from, lte: to } }, include: { items: true } });
+    const invIds = [...new Set(rets.map((r) => r.invoiceId))];
+    const invs = new Map<number, { salesmanId: number | null; exchangeRate: unknown }>();
+    for (let i = 0; i < invIds.length; i += 1000) {
+      const part = await prisma.salesInvoice.findMany({ where: { id: { in: invIds.slice(i, i + 1000) } }, select: { id: true, salesmanId: true, exchangeRate: true } });
+      for (const x of part) invs.set(x.id, x);
+    }
+    for (const r of rets) {
+      const inv = invs.get(r.invoiceId);
+      if (!inv || (p.salesmanId && inv.salesmanId !== p.salesmanId)) continue;
+      const rate = num(inv.exchangeRate) || 1;
+      const b = bucket(periodOf(new Date(r.docDate)), inv.salesmanId ?? null);
+      for (const it of r.items) {
+        b.returns += (num(it.amount) - num(it.vatAmount)) * rate;
+        b.returnCost += num(it.qty) * num(it.unitCost);
+      }
+    }
+
+    // Salesmen with a target but no sales still get a row
+    for (const s of T.salesmen) if (s.isActive) for (const period of periods) if (T.target(s.id, period) > 0) bucket(period, s.id);
+
+    const rows: Row[] = [...buckets.values()].map((b) => {
+      const net = b.sales - b.returns;
+      const cost = b.salesCost - b.returnCost;
+      const profit = net - cost;
+      const target = b.sid ? T.target(b.sid, b.period) : 0;
+      const achievement = target > 0 ? pct(net, target) : 0;
+      const ratePct = target > 0 ? rateFor(slabs, achievement) : 0;
+      return {
+        month: b.period,
+        salesman: b.sid ? L.salesmen.get(b.sid)?.name ?? T.salesmen.find((s) => s.id === b.sid)?.name ?? `#${b.sid}` : '(unassigned)',
+        sales: b.sales,
+        returns: b.returns,
+        net,
+        cost,
+        profit,
+        margin: pct(profit, net),
+        target,
+        achievement,
+        ratePct,
+        incentive: profit > 0 ? (profit * ratePct) / 100 : 0,
+      };
+    });
+    rows.sort((a, b) => String(a.month).localeCompare(String(b.month)) || num(b.incentive) - num(a.incentive) || num(b.net) - num(a.net));
+    const tNet = rows.reduce((a, r) => a + num(r.net), 0);
+    const tProfit = rows.reduce((a, r) => a + num(r.profit), 0);
+    const tTarget = rows.reduce((a, r) => a + num(r.target), 0);
+    return { rows, totals: { margin: pct(tProfit, tNet), achievement: pct(tNet, tTarget) } };
+  },
+};
+
 // ---------------- Gross profit ----------------
 const grossProfit: ReportDef = {
   key: 'gross-profit',
@@ -409,5 +508,5 @@ const salesReturn: ReportDef = {
   },
 };
 
-export const salesReports: ReportDef[] = [salesRegister, salesByCustomer, salesByProduct, salesByBrand, salesmanSales, grossProfit, invoiceRegister, salesReturn];
+export const salesReports: ReportDef[] = [salesRegister, salesByCustomer, salesByProduct, salesByBrand, salesmanSales, salesmanIncentive, grossProfit, invoiceRegister, salesReturn];
 export { rollup, roundRows, sumCols, periodKey };

@@ -25,7 +25,8 @@ async function issueTokens(user: { id: number; username: string }) {
 async function profile(userId: number) {
   const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { role: true } });
   const perms = u.role.name === 'Admin' ? ['*'] : [...(await loadPermissions(u.roleId))];
-  return { id: u.id, username: u.username, fullName: u.fullName, email: u.email, role: u.role.name, branchId: u.branchId, permissions: perms };
+  const bu = u.businessUnitId ? await prisma.businessUnit.findUnique({ where: { id: u.businessUnitId }, select: { id: true, code: true, name: true } }) : null;
+  return { id: u.id, username: u.username, fullName: u.fullName, email: u.email, role: u.role.name, branchId: u.branchId, businessUnitId: u.businessUnitId, businessUnit: bu, permissions: perms };
 }
 
 r.post(

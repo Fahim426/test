@@ -1,3 +1,4 @@
+import { scopeSql, viewBu } from '../lib/bu';
 ﻿import { prisma, Prisma } from '../lib/prisma';
 import type { AuthUser } from '../middleware/auth';
 import type { IndexedRecord } from './types';
@@ -5,9 +6,9 @@ import { branchScope, canView } from './security';
 const cache=new Map<string,{expires:number;records:IndexedRecord[]}>();
 export function clearIndexCache(){cache.clear();}
 export async function loadIndex(user:AuthUser):Promise<IndexedRecord[]>{
- const branch=branchScope(user),key=[user.id,branch,[...user.permissions].sort().join(','),user.role].join('|');const old=cache.get(key);if(old&&old.expires>Date.now())return old.records;
+ const branch=branchScope(user),key=[user.id,branch,viewBu(),[...user.permissions].sort().join(','),user.role].join('|');const old=cache.get(key);if(old&&old.expires>Date.now())return old.records;
  const records:IndexedRecord[]=[];
- const add=async(kind:IndexedRecord['kind'],sql:Prisma.Sql)=>{const rows=await prisma.$queryRaw<Record<string,any>[]>(sql);records.push(...rows.map(r=>({kind,id:r.id,code:String(r.code),name:String(r.name),...(r.aliases?{aliases:String(r.aliases).split('|').filter(Boolean)}:{})})));};
+ const add=async(kind:IndexedRecord['kind'],sql:Prisma.Sql)=>{const rows=await prisma.$queryRaw<Record<string,any>[]>(scopeSql(sql));records.push(...rows.map(r=>({kind,id:r.id,code:String(r.code),name:String(r.name),...(r.aliases?{aliases:String(r.aliases).split('|').filter(Boolean)}:{})})));};
  // Branch names are shared master metadata, also used to refuse an explicitly requested inaccessible branch.
  await add('branch',Prisma.sql`SELECT id,code,name FROM Branch WHERE isActive=1 ORDER BY id LIMIT 10000`);
  if(canView(user,'products'))await add('product',Prisma.sql`SELECT p.id,p.code,p.name,(SELECT GROUP_CONCAT(pn.number SEPARATOR '|') FROM ProductPartNumber pn WHERE pn.productId=p.id) aliases FROM Product p ORDER BY p.id LIMIT 10000`);

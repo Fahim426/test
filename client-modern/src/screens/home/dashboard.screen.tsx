@@ -1,7 +1,8 @@
+import { useFeatures } from '@/hooks/useFeatures';
 import { ReactNode, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  AlertTriangle, ArrowRight, ArrowUpRight, Banknote, Boxes, CalendarDays, Clock, FilePlus2, FileText, HandCoins, LayoutDashboard, PackageSearch,
+  AlertTriangle, ArrowRight, ArrowUpRight, Banknote, Boxes, CalendarDays, Clock, FileCheck, FilePlus2, FileText, HandCoins, LayoutDashboard, PackageSearch,
   Receipt, RefreshCw, ScanSearch, ShoppingBag, ShoppingCart, Truck, TrendingUp, Wallet, type LucideIcon,
 } from 'lucide-react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -11,6 +12,7 @@ import { cn } from '@/lib/cn';
 import { formScreenOf, normalizeDocType } from '@/lib/docRoutes';
 import { useOpenScreen } from '@/store/workspace';
 import { useAuth, usePermission } from '@/store/auth';
+import { PriceCheck } from '@/components/PriceCheck';
 import { useChartTheme } from '@/hooks/useChartTheme';
 import { Badge, Button, ErrorState, Skeleton, StatusBadge } from '@/components/ui';
 import type { ScreenDef } from '@/screens/types';
@@ -53,8 +55,8 @@ const STAGE_SCREEN: Record<string, string> = {
   payments: 'bank-payments',
   sales_enquiry: 'sales-enquiries',
   sales_quotation: 'sales-quotations',
-  sales_order: 'sales-orders',
-  picking: 'pickings',
+  proforma_invoice: 'proforma-invoices',
+  sales_order: 'proforma-invoices',
   delivery_note: 'delivery-notes',
   sales_invoice: 'sales-invoices',
   receipts: 'bank-receipts',
@@ -304,7 +306,7 @@ function Workflow({ title, stages, onOpen }: { title: string; stages: Stage[]; o
   );
 }
 
-const TX_ICON: Record<string, LucideIcon> = { SALES_INVOICE: Receipt, PURCHASE_INVOICE: ShoppingBag, RECEIPT: HandCoins, PAYMENT: Banknote, SALES_ORDER: ShoppingCart, PURCHASE_ORDER: PackageSearch };
+const TX_ICON: Record<string, LucideIcon> = { SALES_INVOICE: Receipt, PURCHASE_INVOICE: ShoppingBag, RECEIPT: HandCoins, PAYMENT: Banknote, SALES_ORDER: ShoppingCart, PROFORMA_INVOICE: FileCheck, PURCHASE_ORDER: PackageSearch };
 
 function greeting() {
   const h = new Date().getHours();
@@ -312,6 +314,7 @@ function greeting() {
 }
 
 function DashboardScreen() {
+  const features = useFeatures();
   const open = useOpenScreen();
   const can = usePermission();
   const user = useAuth((s) => s.user);
@@ -359,9 +362,10 @@ function DashboardScreen() {
               <p className="mt-0.5 text-sm text-ink-muted">Here is what is happening across your business today.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {can('sales_order', 'create') && <Button icon={FilePlus2} variant="primary" onClick={() => open('sales-order-form', {}, 'New Sales Order')}>New Sales Order</Button>}
+              {can('sales_order', 'create') && <Button icon={FilePlus2} onClick={() => open('sales-order-form', {}, 'New Sales Order')}>New Sales Order</Button>}
+              {can('proforma_invoice', 'create') && <Button icon={FilePlus2} variant="primary" onClick={() => open('proforma-invoice-form', {}, 'New Proforma Invoice')}>New Proforma Invoice</Button>}
               {can('purchase_order', 'create') && <Button icon={FilePlus2} onClick={() => open('purchase-order-form', {}, 'New Purchase Order')}>New Purchase Order</Button>}
-              <Button icon={ScanSearch} onClick={() => open('part-lookup', {}, 'Part Lookup')}>Part Lookup</Button>
+              {features.partNumbers && <Button icon={ScanSearch} onClick={() => open('part-lookup', {}, 'Part Lookup')}>Part Lookup</Button>}
               <span className="mx-1 hidden h-6 w-px bg-line md:block" />
               <select className="ctl !w-[150px]" value={range} onChange={(e) => setRange(e.target.value)} aria-label="Trend range">
                 <option value="30d">Last 30 days</option>
@@ -374,6 +378,9 @@ function DashboardScreen() {
               </button>
             </div>
           </div>
+
+          {/* quick item price check */}
+          {can('products', 'view') && <PriceCheck />}
 
           {q.isError && <ErrorState message={apiError(q.error)} onRetry={() => q.refetch()} />}
 

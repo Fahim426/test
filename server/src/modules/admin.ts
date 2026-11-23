@@ -48,7 +48,7 @@ const dateRange = (from?: unknown, to?: unknown) => {
 // USERS
 // =====================================================================
 const users = Router();
-const userSelect = { id: true, username: true, email: true, fullName: true, roleId: true, branchId: true, isActive: true, lastLoginAt: true, createdAt: true, updatedAt: true, role: { select: { id: true, name: true } } } as const;
+const userSelect = { id: true, username: true, email: true, fullName: true, roleId: true, branchId: true, businessUnitId: true, isActive: true, lastLoginAt: true, createdAt: true, updatedAt: true, role: { select: { id: true, name: true } } } as const;
 const passwordRule = z.string().min(6, 'Password must be at least 6 characters').max(100);
 const userCreate = z.object({
   username: z.string().trim().min(3).max(50).regex(/^[A-Za-z0-9._-]+$/, 'Letters, digits, . _ - only'),
@@ -57,6 +57,8 @@ const userCreate = z.object({
   password: passwordRule,
   roleId: z.coerce.number().int().positive(),
   branchId: z.coerce.number().int().positive().nullish(),
+  // the one Business Unit a non-admin user works in (lib/bu.ts); Admin sees all BUs
+  businessUnitId: z.coerce.number().int().positive().nullish(),
   isActive: z.boolean().optional(),
 });
 const userUpdate = userCreate.omit({ password: true }).partial().extend({ password: passwordRule.optional() });
@@ -315,7 +317,8 @@ numbering.get(
   ah(async (_req, res) => {
     const rows = await prisma.documentNumbering.findMany();
     const m = new Map(rows.map((r) => [r.docType, r]));
-    const types = [...new Set([...Object.keys(DOC_DEFAULTS), ...rows.map((r) => r.docType)])].sort();
+    // DOCTYPE@BU rows are the per-Business-Unit counters (numbering.perBu); the format is edited on the DOCTYPE row
+    const types = [...new Set([...Object.keys(DOC_DEFAULTS), ...rows.map((r) => r.docType).filter((t) => !t.includes('@'))])].sort();
     res.json({
       rows: types.map((t) => {
         const cfg = m.get(t) ?? defaultCfg(t);
@@ -911,7 +914,7 @@ backup.post(
     const w = (s: string) => fs.writeSync(fd, s);
     const counts: Record<string, number> = {};
     try {
-      w(`{"meta":${JSON.stringify({ app: 'SmartSpare ERP', createdAt: now.toISOString(), createdBy: req.user!.username, note: 'passwordHash and refresh tokens are excluded' })},"tables":{`);
+      w(`{"meta":${JSON.stringify({ app: 'FlixERP', createdAt: now.toISOString(), createdBy: req.user!.username, note: 'passwordHash and refresh tokens are excluded' })},"tables":{`);
       let first = true;
       for (const m of Prisma.dmmf.datamodel.models) {
         if (SKIP_MODELS.has(m.name)) continue;

@@ -178,6 +178,8 @@ router.post(
           create: { key: "branding.logoFile", value: file },
           update: { value: file },
         });
+        const company = await tx.company.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' } });
+        if (company) await tx.company.update({ where: { id: company.id }, data: { logo: null } });
         await audit(
           tx,
           req.user,
@@ -204,6 +206,8 @@ router.delete(
         create: { key: "branding.logoFile", value: "" },
         update: { value: "" },
       });
+      const company = await tx.company.findFirst({ where: { isActive: true }, orderBy: { id: 'asc' } });
+      if (company) await tx.company.update({ where: { id: company.id }, data: { logo: '' } });
       await audit(tx, req.user, "REMOVE_LOGO", "CompanyConfiguration");
     });
     res.json(await productConfigDto());

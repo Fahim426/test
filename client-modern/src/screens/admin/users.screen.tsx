@@ -18,6 +18,7 @@ interface UserRow {
   fullName: string;
   roleId: number;
   branchId: number | null;
+  businessUnitId: number | null;
   isActive: boolean;
   lastLoginAt: string | null;
   role: { id: number; name: string };
@@ -41,12 +42,20 @@ const useBranchOptions = () =>
     staleTime: 60_000,
   });
 
+const useBuOptions = () =>
+  useQuery({
+    queryKey: ['admin', 'bu-options'],
+    queryFn: async () => (await api.get<Paged<Named>>('/business-units', { params: { pageSize: 100 } })).data.rows,
+    staleTime: 60_000,
+  });
+
 const baseShape = {
   username: z.string().trim().min(3, 'Min 3 characters').max(50).regex(/^[A-Za-z0-9._-]+$/, 'Letters, digits, . _ - only'),
   fullName: z.string().trim().min(1, 'Required').max(200),
   email: z.union([z.string().trim().email('Invalid email'), z.literal('')]),
   roleId: z.string().min(1, 'Role is required'),
   branchId: z.string(),
+  businessUnitId: z.string(),
   isActive: z.boolean(),
 };
 const createSchema = z.object({ ...baseShape, password: z.string().min(6, 'At least 6 characters').max(100) });
@@ -57,6 +66,7 @@ function UserModal({ row, onClose }: { row: UserRow | null; onClose: () => void 
   const qc = useQueryClient();
   const roles = useRoleOptions();
   const branches = useBranchOptions();
+  const bus = useBuOptions();
   const { register, handleSubmit, setError, formState } = useForm<UserForm>({
     resolver: zodResolver(row ? editSchema : createSchema),
     defaultValues: {
@@ -65,6 +75,7 @@ function UserModal({ row, onClose }: { row: UserRow | null; onClose: () => void 
       email: row?.email ?? '',
       roleId: row ? String(row.roleId) : '',
       branchId: row?.branchId ? String(row.branchId) : '',
+      businessUnitId: row?.businessUnitId ? String(row.businessUnitId) : '',
       isActive: row?.isActive ?? true,
       password: '',
     },
@@ -77,6 +88,7 @@ function UserModal({ row, onClose }: { row: UserRow | null; onClose: () => void 
         email: v.email === '' ? null : v.email,
         roleId: Number(v.roleId),
         branchId: v.branchId ? Number(v.branchId) : null,
+        businessUnitId: v.businessUnitId ? Number(v.businessUnitId) : null,
         isActive: v.isActive,
       };
       if (v.password) body.password = v.password;
@@ -125,6 +137,9 @@ function UserModal({ row, onClose }: { row: UserRow | null; onClose: () => void 
         </Field>
         <Field label="Branch" error={err('branchId')}>
           <Select placeholder="(none)" options={(branches.data ?? []).map((b) => ({ value: b.id, label: [b.code, b.name].filter(Boolean).join(' - ') }))} {...register('branchId')} />
+        </Field>
+        <Field label="Business Unit" hint="The one BU this user works in: documents they create belong to it and they see only its records. Leave empty for Admin (sees all)." error={err('businessUnitId')}>
+          <Select placeholder="(none)" options={(bus.data ?? []).map((b) => ({ value: b.id, label: [b.code, b.name].filter(Boolean).join(' - ') }))} {...register('businessUnitId')} />
         </Field>
         <div className="col-span-2">
           <Checkbox label="Active" {...register('isActive')} />

@@ -26,7 +26,7 @@ export interface ReportResult {
   truncated?: boolean; entity?: string;
 }
 
-export type ExportFmt = 'pdf' | 'xlsx' | 'csv';
+export type ExportFmt = 'pdf' | 'xlsx' | 'csv' | 'docx';
 
 /** Blob error bodies are JSON text; extract the server message. */
 export async function blobError(e: unknown): Promise<string> {

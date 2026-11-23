@@ -4,10 +4,13 @@ import { useMemo } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Ban, Check, FilePlus2, FileText, Printer, RotateCcw, Save, Send, ShoppingCart, Trash2, X } from 'lucide-react';
+import { Ban, Check, CheckCircle2, FilePlus2, FileText, Printer, RotateCcw, Save, Send, Trash2, Truck, X } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
 import { ApprovalSection, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout } from '@/components/doc';
+import { Badge, type Tone } from '@/components/ui';
+import { num } from '@/lib/calc';
+import { fmt } from '@/lib/format';
 import { useDocument } from '@/hooks/useDocument';
 import { usePermission } from '@/store/auth';
 import { useWorkspace } from '@/store/workspace';
@@ -24,7 +27,7 @@ const QuotationsList = makeSalesList<AnyRec>({
   formScreen: 'sales-quotation-form',
   permission: 'sales_quotation',
   newLabel: 'New Quotation',
-  statuses: ['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'CONVERTED', 'CANCELLED'],
+  statuses: ['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'PARTIALLY_CONVERTED', 'CONVERTED', 'CANCELLED'],
   columns: [
     { key: 'docNo', header: 'Quotation No', width: 130, filter: 'text' },
     { key: 'docDate', header: 'Date', type: 'date', width: 100 },
@@ -90,17 +93,9 @@ function QuotationForm({ params, tabId }: ScreenProps) {
             <DocAction icon={X} hidden={doc.isNew || !['SENT', 'ACCEPTED'].includes(st)} loading={act.busy === 'reject'} onClick={() => act.post('reject', {}, 'Quotation rejected')}>Reject</DocAction>
             <DocActionSep />
             <DocAction
-              icon={ShoppingCart}
-              variant="primary"
-              hidden={doc.isNew || !['DRAFT', 'SENT', 'ACCEPTED'].includes(st) || !can('sales_order', 'create')}
-              loading={act.busy === 'create-order'}
-              onClick={() => act.convert('create-order', 'sales-order-form', 'Sales order created')}
-            >
-              Create Order
-            </DocAction>
-            <DocAction
               icon={FilePlus2}
-              hidden={doc.isNew || !['DRAFT', 'SENT', 'ACCEPTED', 'CONVERTED'].includes(st) || !can('proforma_invoice', 'create')}
+              variant="primary"
+              hidden={doc.isNew || !['DRAFT', 'SENT', 'ACCEPTED', 'PARTIALLY_CONVERTED', 'CONVERTED'].includes(st) || !can('proforma_invoice', 'create')}
               loading={act.busy === 'create-proforma'}
               onClick={() => act.convert('create-proforma', 'proforma-invoice-form', 'Proforma invoice created')}
             >
@@ -135,6 +130,7 @@ function QuotationForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType="SALES_QUOTATION" docId={doc.id} />
         <TradeFormBody
           tabId={tabId}
           docNo={doc.data?.docNo}
@@ -151,7 +147,6 @@ function QuotationForm({ params, tabId }: ScreenProps) {
         />
         <ApprovalSection approval={doc.data?.approval} onChanged={doc.refetch} />
         <AttachmentsSection docType="SALES_QUOTATION" docId={doc.id} />
-        <DocumentFlow docType="SALES_QUOTATION" docId={doc.id} />
         <AuditSection doc={doc.data} />
       <RevisionHistory entity="SalesQuotation" id={doc.id} />
       </DocumentLayout>
@@ -160,6 +155,38 @@ function QuotationForm({ params, tabId }: ScreenProps) {
 }
 
 /* =============================== PROFORMA =============================== */
+const ORDER_STATE: Record<string, { label: string; tone: Tone }> = {
+  PENDING_APPROVAL: { label: 'Awaiting approval', tone: 'amber' },
+  APPROVED: { label: 'Confirmed · stock reserved', tone: 'green' },
+  PARTIALLY_DELIVERED: { label: 'Partially delivered', tone: 'blue' },
+  DELIVERED: { label: 'Delivered', tone: 'green' },
+  INVOICED: { label: 'Invoiced', tone: 'green' },
+  CLOSED: { label: 'Closed', tone: 'gray' },
+};
+
+/** Delivery / invoicing progress of a confirmed proforma: one slim line. */
+function OrderProgress({ order }: { order: AnyRec }) {
+  const s = ORDER_STATE[order.status] ?? { label: order.status, tone: 'gray' as Tone };
+  const item = (label: string, v: unknown, pct?: unknown) => (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
+      <span className="text-ink-faint">{label}</span>
+      <b className="tabular-nums text-ink">{fmt.qty(v)}</b>
+      {pct !== undefined && <span className="text-[11px] text-ink-faint">({num(pct)}%)</span>}
+    </span>
+  );
+  return (
+    <section className="flex min-h-[30px] flex-wrap items-center gap-x-5 gap-y-1 rounded-card border border-line bg-surface px-3 py-1.5 text-[12px] shadow-card">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">Order</span>
+      <Badge tone={s.tone}>{s.label}</Badge>
+      {item('Ordered', order.orderedQty)}
+      {item('Delivered', order.deliveredQty, order.deliveredPct)}
+      {item('Invoiced', order.invoicedQty, order.invoicedPct)}
+      {item('To deliver', order.pendingDeliveryQty)}
+      {item('Delivered, not invoiced', order.pendingInvoiceQty)}
+    </section>
+  );
+}
+
 const ProformaList = makeSalesList<AnyRec>({
   tableKey: 'proforma-invoices',
   url: '/proforma-invoices',
@@ -167,7 +194,7 @@ const ProformaList = makeSalesList<AnyRec>({
   formScreen: 'proforma-invoice-form',
   permission: 'proforma_invoice',
   newLabel: 'New Proforma',
-  statuses: ['DRAFT', 'ISSUED', 'CONVERTED', 'INVOICED', 'CANCELLED'],
+  statuses: ['DRAFT', 'ISSUED', 'PARTIALLY_CONVERTED', 'CONVERTED', 'INVOICED', 'CANCELLED'],
   columns: [
     { key: 'docNo', header: 'Proforma No', width: 130, filter: 'text' },
     { key: 'docDate', header: 'Date', type: 'date', width: 100 },
@@ -197,6 +224,17 @@ function ProformaForm({ params, tabId }: ScreenProps) {
   const status: string | undefined = doc.data?.status;
   const st = status ?? '';
   const editable = (doc.isNew || st === 'DRAFT') && can('proforma_invoice', doc.isNew ? 'create' : 'edit');
+  /** the (hidden) sales order behind a confirmed proforma */
+  const order: AnyRec | null = doc.data?.order ?? null;
+
+  const confirmOrder = async () => {
+    if (form.formState.isDirty) return toast.warning('Save the proforma first');
+    if (!(await confirm.ask('Confirm this proforma as the customer order? Stock is reserved (after approval, if required) and it can no longer be edited.', { confirmLabel: 'Confirm order' }))) return;
+    const r = await act.post<AnyRec>('confirm', {});
+    if (!r) return;
+    (r.warnings ?? []).forEach((w: string) => toast.warning(w));
+    toast.success(r.autoApproved ? 'Order confirmed and stock reserved' : 'Order confirmed and sent for approval');
+  };
 
   const save = form.handleSubmit(
     async (v) => {
@@ -226,17 +264,26 @@ function ProformaForm({ params, tabId }: ScreenProps) {
             <DocAction icon={Send} hidden={doc.isNew || st !== 'DRAFT'} loading={act.busy === 'issue'} onClick={() => act.post('issue', {}, 'Proforma issued')}>Issue</DocAction>
             <DocActionSep />
             <DocAction
-              icon={ShoppingCart}
+              icon={CheckCircle2}
               variant="primary"
-              hidden={doc.isNew || !['DRAFT', 'ISSUED'].includes(st) || !can('sales_order', 'create')}
-              loading={act.busy === 'create-order'}
-              onClick={() => act.convert('create-order', 'sales-order-form', 'Sales order created')}
+              hidden={doc.isNew || !['DRAFT', 'ISSUED'].includes(st) || !can('proforma_invoice', 'edit')}
+              loading={act.busy === 'confirm'}
+              onClick={confirmOrder}
             >
-              Create Order
+              Confirm Order
+            </DocAction>
+            <DocAction
+              icon={Truck}
+              variant="primary"
+              hidden={!order || !['APPROVED', 'PARTIALLY_DELIVERED'].includes(order.status) || !can('delivery_note', 'create')}
+              loading={act.busy === 'create-delivery'}
+              onClick={() => act.convert('create-delivery', 'delivery-note-form', 'Delivery note created')}
+            >
+              Create Delivery
             </DocAction>
             <DocAction
               icon={FilePlus2}
-              hidden={doc.isNew || !['ISSUED', 'CONVERTED'].includes(st) || !can('sales_invoice', 'create')}
+              hidden={!order || num(order.pendingInvoiceQty) <= 0 || !can('sales_invoice', 'create')}
               loading={act.busy === 'create-invoice'}
               onClick={() => act.convert('create-invoice', 'sales-invoice-form', 'Sales invoice created')}
             >
@@ -245,9 +292,12 @@ function ProformaForm({ params, tabId }: ScreenProps) {
             <DocActionSep />
             <DocAction
               icon={Ban}
-              hidden={doc.isNew || !['DRAFT', 'ISSUED', 'CONVERTED'].includes(st) || !can('proforma_invoice', 'cancel')}
+              hidden={doc.isNew || !['DRAFT', 'ISSUED', 'PARTIALLY_CONVERTED', 'CONVERTED'].includes(st) || (order && num(order.deliveredQty) > 0) || !can('proforma_invoice', 'cancel')}
               loading={act.busy === 'cancel'}
-              onClick={async () => (await confirm.ask('Cancel this proforma invoice?', { danger: true, confirmLabel: 'Cancel proforma' })) && act.post('cancel', {}, 'Proforma cancelled')}
+              onClick={async () =>
+                (await confirm.ask(order ? 'Cancel this proforma? Its order is cancelled and the reserved stock is released.' : 'Cancel this proforma invoice?', { danger: true, confirmLabel: 'Cancel proforma' })) &&
+                act.post('cancel', {}, 'Proforma cancelled')
+              }
             >
               Cancel
             </DocAction>
@@ -269,6 +319,8 @@ function ProformaForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType="PROFORMA_INVOICE" docId={doc.id} />
+        {order && <OrderProgress order={order} />}
         <TradeFormBody
           tabId={tabId}
           docNo={doc.data?.docNo}
@@ -280,8 +332,8 @@ function ProformaForm({ params, tabId }: ScreenProps) {
           errors={form.formState.errors}
         />
         <ApprovalSection approval={doc.data?.approval} onChanged={doc.refetch} />
+        {order?.approval && <ApprovalSection approval={order.approval} onChanged={doc.refetch} />}
         <AttachmentsSection docType="PROFORMA_INVOICE" docId={doc.id} />
-        <DocumentFlow docType="PROFORMA_INVOICE" docId={doc.id} />
         <AuditSection doc={doc.data} />
       <RevisionHistory entity="ProformaInvoice" id={doc.id} />
       </DocumentLayout>

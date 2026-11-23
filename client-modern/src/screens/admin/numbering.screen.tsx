@@ -6,7 +6,7 @@ import { api, apiError } from '@/lib/api';
 import { toast } from '@/store/toast';
 import { usePermission } from '@/store/auth';
 import { useWorkspace } from '@/store/workspace';
-import { Badge, Button, ConfirmDialog, ErrorState, Input, LoadingBlock, NumberInput, Select, Toolbar } from '@/components/ui';
+import { Badge, Button, Checkbox, ConfirmDialog, ErrorState, Input, LoadingBlock, NumberInput, Select, Toolbar } from '@/components/ui';
 
 interface NumRow {
   docType: string;
@@ -62,6 +62,18 @@ function NumberingScreen({ tabId }: ScreenProps) {
   const q = useQuery({ queryKey: ['admin', 'numbering'], queryFn: async () => (await api.get<{ rows: NumRow[] }>('/numbering')).data.rows });
   const rows = q.data ?? [];
 
+  // Business Units: one number series for all BUs, or a separate series per BU with its code in the number
+  const perBu = useQuery({ queryKey: ['admin', 'numbering-perbu'], queryFn: async () => (await api.get<Record<string, string>>('/settings', { params: { prefix: 'numbering.perBu' } })).data });
+  const perBuOn = ['true', '1', 'yes', 'on'].includes((perBu.data?.['numbering.perBu'] ?? '').toLowerCase());
+  const setPerBu = useMutation({
+    mutationFn: async (on: boolean) => api.put('/settings', { settings: { 'numbering.perBu': on } }),
+    onSuccess: () => {
+      toast.success('Numbering setting saved');
+      qc.invalidateQueries({ queryKey: ['admin', 'numbering-perbu'] });
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
   const dirtyKeys = useMemo(() => rows.filter((r) => drafts[r.docType] && !same(drafts[r.docType], pick(r))).map((r) => r.docType), [rows, drafts]);
   useEffect(() => {
     ws.setDirty(tabId, dirtyKeys.length > 0);
@@ -106,6 +118,13 @@ function NumberingScreen({ tabId }: ScreenProps) {
         <input className="ctl w-52" placeholder="Filter document types..." value={filter} onChange={(e) => setFilter(e.target.value)} />
         <span className="text-xs text-ink-muted">Preview shows the next number that will be issued. Lowering the current sequence may create duplicates.</span>
         {dirtyKeys.length > 0 && <Badge tone="amber">{dirtyKeys.length} unsaved</Badge>}
+        <span className="mx-1 h-5 w-px bg-line" />
+        <Checkbox
+          label="Separate series per Business Unit (e.g. INV-TZ-2026-00001)"
+          checked={perBuOn}
+          disabled={!canEdit || setPerBu.isPending}
+          onChange={(e) => setPerBu.mutate(e.target.checked)}
+        />
       </Toolbar>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-collapse text-[13px]">

@@ -6,6 +6,7 @@ import { can } from '../middleware/auth';
 import { num, r2 } from '../lib/calc';
 import { accountIdByKey } from '../services/accounting';
 import { classifyEntry, dayEnd, daysBetween, qAsOf, qDate, qInt, SALES_OPEN } from '../services/finance-common';
+import { recordOpeningVisible } from '../lib/bu';
 import type { ModuleDef } from '../app';
 
 type Side = 'CUSTOMER' | 'SUPPLIER';
@@ -77,11 +78,12 @@ function buildRouter(side: Side) {
       const searchWhere = q.search ? { OR: [{ name: { contains: q.search } }, { code: { contains: q.search } }] } : {};
       const parties = side === 'CUSTOMER' ? await prisma.customer.findMany({ where: searchWhere, orderBy: { name: 'asc' } }) : await prisma.supplier.findMany({ where: searchWhere, orderBy: { name: 'asc' } });
       const un = await unapplied(side);
+      const withOpening = await recordOpeningVisible();
       const all = parties.map((p) => {
         const s = sm.get(p.id);
         const debit = num(s?.debit);
         const credit = num(s?.credit);
-        const opening = num(p.openingBalance);
+        const opening = withOpening ? num(p.openingBalance) : 0;
         const balance = r2(opening + sign * (debit - credit));
         return { id: p.id, code: p.code, name: p.name, isActive: p.isActive, openingBalance: opening, debit: r2(debit), credit: r2(credit), balance, unappliedAmount: un.get(p.id) ?? 0, creditLimit: num(p.creditLimit), overLimit: num(p.creditLimit) > 0 && balance > num(p.creditLimit) };
       });
@@ -104,7 +106,7 @@ function buildRouter(side: Side) {
       const to = qDate(req.query.to, true);
       const acc = await accountIdByKey(prisma, accountKey);
       const base = { accountId: acc, partyType: side, partyId };
-      let opening = num(party.openingBalance);
+      let opening = (await recordOpeningVisible()) ? num(party.openingBalance) : 0;
       if (from) {
         const o = await prisma.journalLine.aggregate({ where: { ...base, journal: { entryDate: { lt: from } } }, _sum: { debit: true, credit: true } });
         opening = r2(opening + sign * (num(o._sum.debit) - num(o._sum.credit)));
@@ -179,9 +181,10 @@ function buildRouter(side: Side) {
       }
       for (const id of [...un.keys(), ...notesAdj.keys()]) if (!byParty.has(id)) byParty.set(id, { buckets: emptyBuckets(), outstanding: 0, invoices: [] });
       const detail = req.query.detail === '1';
+      const withOpening = await recordOpeningVisible();
       const rows = [...byParty.entries()].map(([id, e]) => {
         const p = pm.get(id);
-        const opening = partyId || req.query.includeOpening === '1' ? num(p?.openingBalance) : 0;
+        const opening = withOpening && (partyId || req.query.includeOpening === '1') ? num(p?.openingBalance) : 0;
         const credit = un.get(id) ?? 0;
         return { partyId: id, party: p ? { id: p.id, code: p.code, name: p.name } : null, ...e.buckets, outstanding: e.outstanding, unappliedCredit: credit, unappliedNotes: notesAdj.get(id) ?? 0, openingBalance: opening, total: r2(e.outstanding - credit + (notesAdj.get(id) ?? 0) + opening), ...(detail ? { invoices: e.invoices } : {}) };
       });

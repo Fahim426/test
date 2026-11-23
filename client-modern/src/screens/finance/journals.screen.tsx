@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileSpreadsheet, FolderOpen, Plus, Printer, RotateCcw, Save, Trash2, ExternalLink } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { DataTable, Column } from '@/components/DataTable';
@@ -9,14 +9,15 @@ import { Combo, esc, n0, printHtml, useAccounts, useParties, accLabel, moneyText
 import { useDocument } from '@/hooks/useDocument';
 import { useCompany } from '@/hooks/useCompany';
 import { useOpenScreen, useWorkspace } from '@/store/workspace';
-import { usePermission } from '@/store/auth';
-import { api, apiError } from '@/lib/api';
+import { useAuth, usePermission } from '@/store/auth';
+import { api, apiError, Paged } from '@/lib/api';
 import { fmt, r2, today } from '@/lib/format';
 import { toast } from '@/store/toast';
 import { cn } from '@/lib/cn';
 
 interface JLine {
   id: number;
+  buId?: number | null;
   accountId: number;
   debit: number;
   credit: number;
@@ -28,6 +29,7 @@ interface JLine {
 }
 interface JournalDoc {
   id: number;
+  buId?: number | null;
   entryNo: string;
   entryDate: string;
   entryType: string;
@@ -41,6 +43,17 @@ interface JournalDoc {
   createdByUser?: { username: string } | null;
 }
 const titleOf = (d: JournalDoc) => d.entryNo;
+
+/** Business Units (id -> code) for the BU column / selector */
+function useBus() {
+  const q = useQuery({
+    queryKey: ['business-units'],
+    staleTime: 300_000,
+    queryFn: async () => (await api.get<Paged<{ id: number; code: string; name: string; isActive: boolean }>>('/business-units', { params: { pageSize: 100 } })).data.rows.filter((b) => b.isActive),
+  });
+  const list = q.data ?? [];
+  return { list, code: (id?: number | null) => list.find((b) => b.id === id)?.code ?? '' };
+}
 
 /* ============================================================== LIST */
 function JournalList({ opening }: { opening?: boolean }) {
@@ -86,6 +99,7 @@ function JournalView({ doc, refetch }: { doc: JournalDoc; refetch: () => void })
   const can = usePermission();
   const company = useCompany();
   const qc = useQueryClient();
+  const bus = useBus();
   const [revOpen, setRevOpen] = useState(false);
   const [revDate, setRevDate] = useState(today());
   const [busy, setBusy] = useState(false);
@@ -132,14 +146,16 @@ function JournalView({ doc, refetch }: { doc: JournalDoc; refetch: () => void })
         <Field label="Source"><Input readOnly value={[fmt.status(doc.sourceType), doc.sourceNo].filter(Boolean).join(' - ')} /></Field>
         <Field label="Narration"><Input readOnly value={doc.narration ?? ''} /></Field>
         <Field label="Created By"><Input readOnly value={doc.createdByUser?.username ?? ''} /></Field>
+        <Field label="Business Unit"><Input readOnly value={bus.code(doc.buId)} /></Field>
       </HeaderSection>
       <DocSection title="Lines" bodyClassName="p-0">
         <table className="w-full border-collapse">
-          <thead><tr className="h-8"><th className="grid-th">Account</th><th className="grid-th">Party</th><th className="grid-th">Description</th><th className="grid-th w-32 text-right">Debit</th><th className="grid-th w-32 text-right">Credit</th></tr></thead>
+          <thead><tr className="h-8"><th className="grid-th">Account</th><th className="grid-th w-20">BU</th><th className="grid-th">Party</th><th className="grid-th">Description</th><th className="grid-th w-32 text-right">Debit</th><th className="grid-th w-32 text-right">Credit</th></tr></thead>
           <tbody>
             {doc.lines.map((l) => (
               <tr key={l.id} className="h-8">
                 <td className="grid-td"><button className="text-brand hover:underline" onClick={() => open('general-ledger', { accountId: l.accountId }, `GL ${l.account.code}`)}>{accLabel(l.account)}</button></td>
+                <td className="grid-td text-[12px] font-medium text-ink-muted">{bus.code(l.buId)}</td>
                 <td className="grid-td">{l.party?.name ?? ''}</td>
                 <td className="grid-td">{l.description}</td>
                 <td className="grid-td text-right tabular-nums">{n0(l.debit) ? fmt.money(l.debit) : ''}</td>
@@ -147,7 +163,7 @@ function JournalView({ doc, refetch }: { doc: JournalDoc; refetch: () => void })
               </tr>
             ))}
           </tbody>
-          <tfoot><tr className="h-8 bg-surface-2 font-semibold"><td colSpan={3} className="px-3 text-right text-[13px]">Total</td><td className="px-3 text-right text-[13px] tabular-nums">{fmt.money(dr)}</td><td className="px-3 text-right text-[13px] tabular-nums">{fmt.money(cr)}</td></tr></tfoot>
+          <tfoot><tr className="h-8 bg-surface-2 font-semibold"><td colSpan={4} className="px-3 text-right text-[13px]">Total</td><td className="px-3 text-right text-[13px] tabular-nums">{fmt.money(dr)}</td><td className="px-3 text-right text-[13px] tabular-nums">{fmt.money(cr)}</td></tr></tfoot>
         </table>
       </DocSection>
       <Modal open={revOpen} title={`Reverse ${doc.entryNo}`} onClose={() => setRevOpen(false)} width="sm" footer={<><Button onClick={() => setRevOpen(false)}>Cancel</Button><Button variant="danger" loading={busy} onClick={reverse}>Reverse</Button></>}>
@@ -168,18 +184,22 @@ interface EditLine {
   accountId: number | null;
   partyType: '' | 'CUSTOMER' | 'SUPPLIER';
   partyId: number | null;
+  /** Business Unit of the line ('' = the journal's BU); admin only */
+  buId: string;
   description: string;
   debit: string;
   credit: string;
 }
 let seq = 1;
-const blank = (): EditLine => ({ k: seq++, accountId: null, partyType: '', partyId: null, description: '', debit: '', credit: '' });
+const blank = (): EditLine => ({ k: seq++, accountId: null, partyType: '', partyId: null, buId: '', description: '', debit: '', credit: '' });
 
 function JournalForm({ tabId, params }: ScreenProps) {
   const ws = useWorkspace();
   const can = usePermission();
   const doc = useDocument<JournalDoc>('/journals', params.id, { tabId, titleOf });
   const accounts = useAccounts();
+  const bus = useBus();
+  const isAdmin = useAuth((s) => s.user?.role) === 'Admin';
   const customers = useParties('CUSTOMER');
   const suppliers = useParties('SUPPLIER');
   const [date, setDate] = useState(today());
@@ -229,6 +249,7 @@ function JournalForm({ tabId, params }: ScreenProps) {
           partyType: l.partyType && l.partyId ? l.partyType : null,
           partyId: l.partyType && l.partyId ? l.partyId : null,
           description: l.description || null,
+          buId: l.buId ? Number(l.buId) : null,
         })),
       });
       ws.setDirty(tabId, false);
@@ -260,12 +281,13 @@ function JournalForm({ tabId, params }: ScreenProps) {
         <Field label="Journal No"><Input readOnly value="(auto)" /></Field>
         <Field label="Date" required><DateInput value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Narration"><Input value={narration} onChange={(e) => setNarration(e.target.value)} /></Field>
+        {isAdmin && <div className="col-span-3 text-xs text-ink-muted">Business Unit transfer: put the lines of each BU in its own BU column (e.g. Dr Sales [TZ] / Cr Sales [CARSN]). The BU selector in the top bar is the default for lines left on (default).</div>}
       </HeaderSection>
       <DocSection title="Lines" bodyClassName="p-0">
         <table className="w-full border-collapse">
           <thead>
             <tr className="h-8">
-              <th className="grid-th w-8">#</th><th className="grid-th w-[300px]">Account</th><th className="grid-th w-24">Party Type</th><th className="grid-th w-[220px]">Party</th>
+              <th className="grid-th w-8">#</th><th className="grid-th w-[300px]">Account</th>{isAdmin && <th className="grid-th w-24" title="Business Unit of the line. Lines in different BUs are balanced automatically through Inter-BU Clearing.">BU</th>}<th className="grid-th w-24">Party Type</th><th className="grid-th w-[220px]">Party</th>
               <th className="grid-th">Description</th><th className="grid-th w-32 text-right">Debit</th><th className="grid-th w-32 text-right">Credit</th><th className="grid-th w-8" />
             </tr>
           </thead>
@@ -274,6 +296,11 @@ function JournalForm({ tabId, params }: ScreenProps) {
               <tr key={l.k} className="h-9">
                 <td className="grid-td text-center text-ink-faint">{i + 1}</td>
                 <td className="grid-td p-0.5"><Combo options={accOpts} value={l.accountId} onChange={(x) => setAccount(l.k, Number(x))} placeholder="Account..." /></td>
+                {isAdmin && (
+                  <td className="grid-td p-0.5">
+                    <Select value={l.buId} onChange={(e) => upd(l.k, { buId: e.target.value })} options={[{ value: '', label: '(default)' }, ...bus.list.map((b) => ({ value: b.id, label: b.code }))]} />
+                  </td>
+                )}
                 <td className="grid-td p-0.5">
                   <Select value={l.partyType} onChange={(e) => upd(l.k, { partyType: e.target.value as EditLine['partyType'], partyId: null })} options={[{ value: '', label: '-' }, { value: 'CUSTOMER', label: 'Customer' }, { value: 'SUPPLIER', label: 'Supplier' }]} />
                 </td>
@@ -291,7 +318,7 @@ function JournalForm({ tabId, params }: ScreenProps) {
           </tbody>
           <tfoot>
             <tr className="h-9 bg-surface-2 font-semibold">
-              <td colSpan={5} className="px-3 text-right text-[13px]">
+              <td colSpan={isAdmin ? 6 : 5} className="px-3 text-right text-[13px]">
                 <span className={cn('mr-3 rounded-lg px-2 py-0.5', balanced ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger')}>
                   {balanced ? 'Balanced' : `Difference ${moneyText(diff)}`}
                 </span>

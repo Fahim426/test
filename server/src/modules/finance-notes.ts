@@ -113,7 +113,7 @@ router.post(
           const ca = await tx.account.findUnique({ where: { id: counterId } });
           if (!ca || ca.isGroup) throw badRequest('Invalid counter account');
         }
-        const key = async (k: string) => (await tx.account.findUnique({ where: { systemKey: k } }))?.id;
+        const key = async (k: string) => (await tx.account.findFirst({ where: { systemKey: k } }))?.id;
         if (!counterId) {
           if (b.partyType === 'CUSTOMER') counterId = (await key(b.noteType === 'CREDIT' ? 'SALES_RETURNS' : 'SALES')) ?? null;
           else counterId = (await key('INVENTORY')) ?? null;

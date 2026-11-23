@@ -1,5 +1,6 @@
-import { useFeatures, screenEnabled, moduleEnabled } from '@/hooks/useFeatures';
-import { CompanyLogo } from '@/components/CompanyLogo';
+import './sidebar-colors.css';
+import { useProductConfig, moduleEnabled, screenEnabled } from '@/hooks/useProductConfig';
+import { usePermission } from '@/store/auth';
 import { useEffect, useRef, useState } from 'react';
 import { Boxes, ChevronDown, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { ribbonConfig, locateScreen, RibbonItem, RibbonModule } from '@/ribbon/ribbonConfig';
@@ -24,14 +25,15 @@ function NavItem({ item, active, onPick }: { item: RibbonItem; active: boolean; 
   const Icon = item.icon;
   return (
     <button
+      data-active={active}
       onClick={onPick}
       title={item.label}
       className={cn(
-        'group relative flex h-8 w-full items-center gap-2.5 rounded-lg pl-3 pr-2 text-left text-[13px] transition',
+        'ss-sidebar-item group relative flex h-8 w-full items-center gap-2.5 rounded-lg pl-3 pr-2 text-left text-[13px] transition',
         active ? 'bg-brand-soft font-medium text-brand-ink' : 'text-ink-muted hover:bg-surface-3 hover:text-ink',
       )}
     >
-      {active && <span className="absolute left-0 top-1.5 h-5 w-[3px] rounded-r-full bg-brand" />}
+      {active && <span className="ss-sidebar-active-bar absolute left-0 top-1.5 h-5 w-[3px] rounded-r-full bg-brand" />}
       <Icon size={16} strokeWidth={1.8} className={cn('shrink-0', active ? 'text-brand' : 'text-ink-faint group-hover:text-ink-muted')} />
       <span className="truncate">{item.label}</span>
     </button>
@@ -40,16 +42,15 @@ function NavItem({ item, active, onPick }: { item: RibbonItem; active: boolean; 
 
 /** groups of a module (a group with a single item of the same name is rendered as a plain item). */
 function ModuleItems({ mod, onPick, activeScreen }: { mod: RibbonModule; onPick: (it: RibbonItem) => void; activeScreen?: string }) {
-  const features = useFeatures();
   return (
     <div className="flex flex-col gap-0.5 pb-2 pl-3.5 pr-1">
-      <div className="flex flex-col gap-0.5 border-l border-line pl-1.5">
+      <div className="ss-sidebar-branch flex flex-col gap-0.5 border-l border-line pl-1.5">
         {mod.groups.map((g) => {
           const plain = g.items.length === 1 && g.items[0].label === g.label;
           return (
             <div key={g.label} className="flex flex-col gap-0.5">
-              {!plain && <div className="px-3 pb-0.5 pt-2.5 text-[10.5px] font-semibold uppercase tracking-wider text-ink-faint">{g.label}</div>}
-              {g.items.filter(it=>screenEnabled(it.id,features)).map((it) => (
+              {!plain && <div className="ss-sidebar-caption px-3 pb-0.5 pt-2.5 text-[10.5px] font-semibold uppercase tracking-wider text-ink-faint">{g.label}</div>}
+              {g.items.map((it) => (
                 <NavItem key={g.label + it.id} item={it} active={activeScreen === it.id} onPick={() => onPick(it)} />
               ))}
             </div>
@@ -61,6 +62,15 @@ function ModuleItems({ mod, onPick, activeScreen }: { mod: RibbonModule; onPick:
 }
 
 function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+  const features = useProductConfig().config.features;
+  const can = usePermission();
+  const modules = ribbonConfig.filter(m => moduleEnabled(m.key, features)).map(m => ({ ...m, groups: m.groups.map(g => ({ ...g, items: g.items.filter(it => {
+    if (!screenEnabled(it.id, features)) return false;
+    const permission = getScreen(it.id)?.permission;
+    if (!permission) return true;
+    const [module, action = 'view'] = permission.split(':');
+    return can(module, action);
+  }) })).filter(g => g.items.length) })).filter(m => m.groups.length);
   const { openModules, toggleModuleOpen, setModuleOpen, setSidebarCollapsed } = useUi();
   const open = useWorkspaceStore((s) => s.open);
   const activeScreen = useActiveScreen();
@@ -69,9 +79,12 @@ function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
   const scroller = useRef<HTMLDivElement>(null);
 
   // expand the module of the active screen
-  const features = useFeatures();
   const am = activeModuleKey(activeScreen);
+  const firstRun = useRef(true);
   useEffect(() => {
+    // all groups start collapsed; afterwards follow the active screen's module
+    if (!am) return;
+    if (firstRun.current) { firstRun.current = false; return; }
     if (am && !collapsed) setModuleOpen(am, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [am, collapsed]);
@@ -90,22 +103,25 @@ function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
   };
 
   if (collapsed) {
-    const flyMod = ribbonConfig.find((m) => m.key === fly?.key);
+    const flyMod = modules.find((m) => m.key === fly?.key);
     return (
       <>
-        <div className="flex flex-1 flex-col items-center gap-1.5 overflow-visible px-2 pt-3">
-          {ribbonConfig.filter(m=>moduleEnabled(m.key,features)).map((m) => {
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-2 pt-3">
+          {modules.map((m) => {
             const Icon = MODULE_ICONS[m.key];
             const on = am === m.key;
             return (
               <button
                 key={m.key}
                 data-rail
+                data-module={m.key}
+                data-current={on || fly?.key === m.key}
+                aria-label={m.module}
                 onClick={(e) => {
                   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  setFly((f) => (f?.key === m.key ? null : { key: m.key, top: Math.min(r.top, window.innerHeight - 360) }));
+                  setFly((f) => (f?.key === m.key ? null : { key: m.key, top: Math.max(8, Math.min(r.top, window.innerHeight - Math.min(360, window.innerHeight * 0.8))) }));
                 }}
-                className={cn('group relative flex h-10 w-10 items-center justify-center rounded-xl transition', on || fly?.key === m.key ? 'bg-brand-soft text-brand' : 'text-ink-muted hover:bg-surface-3 hover:text-ink')}
+                className={cn('ss-sidebar-module ss-sidebar-rail group relative flex h-10 w-10 items-center justify-center rounded-xl transition', on || fly?.key === m.key ? 'bg-brand-soft text-brand' : 'text-ink-muted hover:bg-surface-3 hover:text-ink')}
               >
                 <Icon size={19} strokeWidth={1.8} />
                 {!fly && <span className="pointer-events-none absolute left-full z-50 ml-3 hidden whitespace-nowrap rounded-md bg-ink px-2 py-1 text-xs font-medium text-surface shadow-pop group-hover:block">{m.module}</span>}
@@ -116,17 +132,18 @@ function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
         {flyMod && fly && (
           <div
             ref={flyRef}
-            style={{ top: Math.max(8, fly.top), left: 76 }}
-            className="fixed z-[140] max-h-[80vh] w-[250px] animate-pop-in overflow-y-auto rounded-xl border border-line bg-surface p-2 shadow-pop"
+            data-module={flyMod.key}
+            style={{ top: Math.max(8, fly.top), left: 76, maxHeight: Math.min(window.innerHeight * 0.8, window.innerHeight - Math.max(8, fly.top) - 8) }}
+            className="ss-sidebar-module fixed z-[140] max-h-[80vh] w-[250px] animate-pop-in overflow-y-auto rounded-xl border border-line bg-surface p-2 shadow-pop"
           >
-            <div className="px-2 pb-1 pt-1 text-[11px] font-bold uppercase tracking-wider text-brand">{flyMod.module}</div>
+            <div className="ss-sidebar-caption px-2 pb-1 pt-1 text-[11px] font-bold uppercase tracking-wider text-brand">{flyMod.module}</div>
             <ModuleItems mod={flyMod} onPick={pick} activeScreen={activeScreen} />
           </div>
         )}
         <button
           onClick={() => setSidebarCollapsed(false)}
           className="mx-auto mb-1 mt-2 flex h-9 w-9 items-center justify-center rounded-lg text-ink-faint transition hover:bg-surface-3 hover:text-ink"
-          title="Expand sidebar"
+          title="Expand sidebar" aria-label="Expand sidebar"
         >
           <PanelLeftOpen size={17} />
         </button>
@@ -136,20 +153,20 @@ function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
 
   return (
     <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-2.5 py-3">
-      {ribbonConfig.map((m) => {
+      {modules.map((m) => {
         const Icon = MODULE_ICONS[m.key];
         const isOpen = !!openModules[m.key];
         const hasActive = am === m.key;
         return (
-          <div key={m.key} className="mb-0.5">
+          <div key={m.key} data-module={m.key} data-open={isOpen} data-current={hasActive} className="ss-sidebar-module mb-0.5">
             <button
               onClick={() => toggleModuleOpen(m.key)}
               className={cn(
-                'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[12px] font-semibold uppercase tracking-wider transition hover:bg-surface-3',
+                'ss-sidebar-module-button flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[12px] font-semibold uppercase tracking-wider transition hover:bg-surface-3',
                 hasActive ? 'text-brand' : 'text-ink-muted',
               )}
             >
-              <Icon size={16} strokeWidth={1.9} />
+              <span className="ss-sidebar-module-icon"><Icon size={16} strokeWidth={1.9} /></span>
               <span className="flex-1">{m.module}</span>
               <ChevronDown size={14} className={cn('text-ink-faint transition-transform duration-200', !isOpen && '-rotate-90')} />
             </button>
@@ -162,6 +179,15 @@ function SidebarBody({ collapsed, onNavigate }: { collapsed: boolean; onNavigate
 }
 
 export function Logo({ size = 34 }: { size?: number }) {
+  const company = useCompany();
+  const { config } = useProductConfig();
+  const logo = (typeof company.data?.logo === 'string' ? company.data.logo : null) || config.logoDataUri;
+  if (logo)
+    return (
+      <span style={{ width: size * 1.7, height: size }} className="flex shrink-0 items-center justify-center overflow-hidden rounded">
+        <img src={logo} alt="" className="h-full w-full object-contain" />
+      </span>
+    );
   return (
     <span
       style={{ width: size, height: size }}
@@ -187,28 +213,27 @@ function SidebarFooter({ collapsed }: { collapsed: boolean }) {
 }
 
 export function Sidebar() {
-  const features = useFeatures();
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const toggle = useUi((s) => s.toggleSidebar);
   const { mobileNavOpen, setMobileNavOpen } = useUi();
   const company = useCompany();
 
   const header = (isCollapsed: boolean, mobile?: boolean) => (
-    <div className={cn('flex h-14 shrink-0 items-center gap-3 border-b border-line', isCollapsed ? 'justify-center px-2' : 'px-4')}>
-      <CompanyLogo className="h-9 w-16" />
+    <div className={cn('flex min-h-14 shrink-0 items-center gap-3 border-b border-line py-2', isCollapsed ? 'justify-center px-2' : 'px-4')}>
+      <Logo />
       {!isCollapsed && (
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-[14px] font-semibold text-ink">{company.data?.name ?? 'Business ERP'}</div>
-          <div className="text-[11px] text-ink-faint">ERP workspace</div>
+          <div className="line-clamp-2 break-words text-[14px] font-semibold leading-snug text-ink" title={company.data?.name ?? 'Business ERP'}>{company.data?.name ?? 'FlixERP'}</div>
+          <div className="truncate text-[11px] text-ink-faint">{(company.data?.tagline as string | undefined) || 'ERP workspace'}</div>
         </div>
       )}
       {!isCollapsed && !mobile && (
-        <button onClick={toggle} title="Collapse sidebar" className="rounded-lg p-1.5 text-ink-faint transition hover:bg-surface-3 hover:text-ink">
+        <button onClick={toggle} title="Collapse sidebar" aria-label="Collapse sidebar" className="rounded-lg p-1.5 text-ink-faint transition hover:bg-surface-3 hover:text-ink">
           <PanelLeftClose size={16} />
         </button>
       )}
       {mobile && (
-        <button onClick={() => setMobileNavOpen(false)} className="rounded-lg p-1.5 text-ink-faint hover:bg-surface-3">
+        <button aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} className="rounded-lg p-1.5 text-ink-faint hover:bg-surface-3">
           <X size={16} />
         </button>
       )}
@@ -217,7 +242,7 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className={cn('no-print relative z-30 hidden shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 md:flex', collapsed ? 'w-[68px]' : 'w-[264px]')}>
+      <aside data-tour="tree" className={cn('no-print relative z-30 hidden shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 md:flex', collapsed ? 'w-[68px]' : 'w-[264px]')}>
         {header(collapsed)}
         <SidebarBody collapsed={collapsed} />
         <SidebarFooter collapsed={collapsed} />

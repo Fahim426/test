@@ -670,11 +670,14 @@ export interface ListConfig<T extends object> {
   defaultSort?: { key: string; dir: 'asc' | 'desc' };
   exportName?: string;
   idOf?: (r: T) => number;
+  /** "New" opens this picker (documents with items pending for this step) instead of a blank form */
+  picker?: (p: { open: boolean; onClose: () => void }) => ReactNode;
 }
 
 export function PurchaseList<T extends object>(c: ListConfig<T>) {
   const open = useOpenScreen();
   const can = usePermission();
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [status, setStatus] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -687,7 +690,7 @@ export function PurchaseList<T extends object>(c: ListConfig<T>) {
     ...(c.rowActions ? c.rowActions(r, open) : []),
     ...(c.pdfType ? [{ label: 'PDF', icon: FileDown, onClick: (x: T) => fetchPdf(c.pdfType!, idOf(x), false) }] : []),
   ];
-  return (
+  const table = (
     <DataTable<T>
       tableKey={c.tableKey}
       url={c.url}
@@ -713,13 +716,21 @@ export function PurchaseList<T extends object>(c: ListConfig<T>) {
           )}
           {c.extraToolbar}
           {!c.noNew && can(c.module, 'create') && (
-            <Button variant="primary" icon={Plus} onClick={() => open(c.formScreen, c.newParams ?? {}, c.newLabel ?? `New ${c.title}`)}>
+            <Button variant="primary" icon={Plus} onClick={() => (c.picker ? setPickerOpen(true) : open(c.formScreen, c.newParams ?? {}, c.newLabel ?? `New ${c.title}`))}>
               {c.newLabel ?? `New ${c.title}`}
             </Button>
           )}
         </>
       }
     />
+  );
+  return c.picker ? (
+    <>
+      {table}
+      {c.picker({ open: pickerOpen, onClose: () => setPickerOpen(false) })}
+    </>
+  ) : (
+    table
   );
 }
 

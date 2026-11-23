@@ -221,6 +221,7 @@ function PickingForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType={TYPE} docId={doc.id} />
         {dirty && editable && <InfoBanner tone="amber">You have unsaved picked quantities. Press <b>Save Picking</b> to record them.</InfoBanner>}
         <HeaderSection title="Picking Information" columns={4}>
           <Field label="Picking Number"><Input value={doc.data?.docNo ?? ''} readOnly /></Field>
@@ -341,7 +342,6 @@ function PickingForm({ params, tabId }: ScreenProps) {
         </DocSection>
 
         <AttachmentsSection docType={TYPE} docId={doc.id} />
-        <DocumentFlow docType={TYPE} docId={doc.id} />
         <AuditSection doc={doc.data} />
       </DocumentLayout>
     </>

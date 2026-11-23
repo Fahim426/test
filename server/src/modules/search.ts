@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prisma, Prisma } from '../lib/prisma';
+import { prisma, Prisma, partNumberProductIds } from '../lib/prisma';
 import { ah } from '../lib/http';
 import { badRequest, forbidden, notFound } from '../lib/errors';
 import { DOCS, findDocs, hasView, permOf } from '../services/admin-docs';
@@ -20,6 +20,7 @@ r.get(
     const results: { type: string; typeLabel: string; id: number; no: string; label: string; route: string; extra?: Record<string, unknown> }[] = [];
 
     if (hasView(u, 'products')) {
+      const pnIds = await partNumberProductIds(q);
       const products = await prisma.product.findMany({
         where: {
           OR: [
@@ -29,7 +30,7 @@ r.get(
             { description: { contains: q } },
             { oemNumber: { contains: q } },
             { barcode: { contains: q } },
-            { partNumbers: { some: { number: { contains: q } } } },
+            { id: { in: pnIds.length ? pnIds : [-1] } },
           ],
         },
         include: { partNumbers: { where: { number: { contains: q } }, take: 1 }, brand: { select: { name: true } } },
@@ -91,12 +92,14 @@ r.get(
 async function partDrillDown(number: string) {
   const n = number.trim();
   if (!n) throw badRequest('Part number is required');
-  const where: Prisma.ProductWhereInput = { OR: [{ code: n }, { oemNumber: n }, { barcode: n }, { partNumbers: { some: { number: n } } }] };
+  const pnExact = await partNumberProductIds(n, true);
+  const where: Prisma.ProductWhereInput = { OR: [{ code: n }, { stockNumber: n }, { oemNumber: n }, { barcode: n }, { id: { in: pnExact.length ? pnExact : [-1] } }] };
   let matches = await prisma.product.findMany({ where, select: { id: true, code: true, name: true, oemNumber: true }, orderBy: { code: 'asc' }, take: 20 });
   if (!matches.length) {
     // fall back to partial match so users still land somewhere useful
+    const pnPartial = await partNumberProductIds(n);
     matches = await prisma.product.findMany({
-      where: { OR: [{ code: { contains: n } }, { oemNumber: { contains: n } }, { barcode: { contains: n } }, { partNumbers: { some: { number: { contains: n } } } }] },
+      where: { OR: [{ code: { contains: n } }, { stockNumber: { contains: n } }, { oemNumber: { contains: n } }, { barcode: { contains: n } }, { id: { in: pnPartial.length ? pnPartial : [-1] } }] },
       select: { id: true, code: true, name: true, oemNumber: true },
       orderBy: { code: 'asc' },
       take: 20,

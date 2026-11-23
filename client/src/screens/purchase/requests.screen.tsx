@@ -38,7 +38,7 @@ const MR: ReqCfg = { url: '/material-requests', module: 'material_request', docT
 const PR: ReqCfg = { url: '/purchase-requisitions', module: 'purchase_requisition', docType: 'PURCHASE_REQUISITION', entity: 'PurchaseRequisition', title: 'Purchase Requisition', icon: FileText, isMR: false };
 
 const MR_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'CLOSED', 'CANCELLED'];
-const PR_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'CONVERTED', 'CLOSED', 'CANCELLED'];
+const PR_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'PARTIALLY_CONVERTED', 'CONVERTED', 'CLOSED', 'CANCELLED'];
 
 /* ------------------------------------------------------------------ lists */
 interface ReqRow { id: number; docNo: string; docDate: string; requestedBy?: string; department?: string; priority?: string; itemCount?: number; totalQty?: number; status: string; warehouse?: { name: string } | null }
@@ -99,7 +99,7 @@ function RequestForm({ cfg, params, tabId }: ScreenProps & { cfg: ReqCfg }) {
     { action: 'submit', label: 'Submit', icon: Send, from: ['DRAFT'], perm: 'edit', saveFirst: true },
     { action: 'approve', label: 'Approve', icon: Check, from: ['SUBMITTED'], perm: 'approve', variant: 'primary', ask: { title: 'Approve', message: `Approve this ${cfg.title.toLowerCase()}?`, commentLabel: 'Comment (optional)' } },
     { action: 'reject', label: 'Reject', icon: XCircle, from: ['SUBMITTED'], perm: 'reject', variant: 'danger', ask: { title: 'Reject', commentLabel: 'Reason', commentRequired: true, danger: true } },
-    { action: 'close', label: 'Close', icon: Lock, from: cfg.isMR ? ['APPROVED'] : ['APPROVED', 'CONVERTED'], perm: 'edit', ask: { title: 'Close', message: 'Close this document?' } },
+    { action: 'close', label: 'Close', icon: Lock, from: cfg.isMR ? ['APPROVED'] : ['APPROVED', 'PARTIALLY_CONVERTED', 'CONVERTED'], perm: 'edit', ask: { title: 'Close', message: 'Close this document?' } },
     { action: 'cancel', label: 'Cancel', icon: XCircle, from: ['DRAFT', 'SUBMITTED', 'APPROVED'], perm: 'cancel', variant: 'danger', ask: { title: 'Cancel document', commentLabel: 'Reason (optional)', danger: true } },
   ];
 
@@ -124,7 +124,7 @@ function RequestForm({ cfg, params, tabId }: ScreenProps & { cfg: ReqCfg }) {
             extra={
               <>
                 {cfg.isMR && <DocAction icon={ArrowRightCircle} hidden={status !== 'APPROVED'} onClick={createRequisition}>Create Requisition</DocAction>}
-                {!cfg.isMR && <DocAction icon={FileSearch} hidden={status !== 'APPROVED'} onClick={() => setEnqOpen(true)}>Create Enquiry (RFQ)</DocAction>}
+                {!cfg.isMR && <DocAction icon={FileSearch} hidden={!['APPROVED', 'PARTIALLY_CONVERTED'].includes(status ?? '')} onClick={() => setEnqOpen(true)}>Create Enquiry (RFQ)</DocAction>}
               </>
             }
           />

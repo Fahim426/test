@@ -19,10 +19,24 @@ import {
   TreeNode,
   AccRow,
 } from '../services/finance-common';
+import { drCr, partyHeads } from '../services/party-heads';
+import { recordOpeningVisible } from '../lib/bu';
 import type { ModuleDef } from '../app';
 
 // =====================================================================  LEDGER REPORTS
 const ledger = Router();
+
+/** Customer (side=CUSTOMER) or supplier (side=SUPPLIER) heads under the Trade Debtors / Creditors control account. */
+ledger.get(
+  '/party-heads',
+  can('ledger', 'view'),
+  ah(async (req, res) => {
+    const side = String(req.query.side ?? '').toUpperCase();
+    if (side !== 'CUSTOMER' && side !== 'SUPPLIER') throw badRequest('side must be CUSTOMER or SUPPLIER');
+    const ph = await partyHeads(side, { from: qDate(req.query.from), to: qDate(req.query.to ?? req.query.asOf, true), includeZero: req.query.includeZero === '1' });
+    res.json(ph);
+  }),
+);
 
 ledger.get(
   '/general',
@@ -54,7 +68,18 @@ ledger.get(
       orderBy: [{ journal: { entryDate: 'asc' } }, { journalId: 'asc' }, { id: 'asc' }],
     });
     const pn = await partyNames(lines);
-    const opening = natural(acc.type, openDr, openCr);
+    // one customer / supplier on its control account: its opening balance on the record belongs to the opening
+    // (the opening journal carries it only as an untagged lump sum on the control account)
+    let recordOpening = 0;
+    if (pid && (acc.systemKey === 'AR' || acc.systemKey === 'AP')) {
+      const side = String(req.query.partyType ?? '').toUpperCase();
+      const p =
+        side === 'CUSTOMER' && acc.systemKey === 'AR' ? await prisma.customer.findUnique({ where: { id: pid }, select: { openingBalance: true } })
+        : side === 'SUPPLIER' && acc.systemKey === 'AP' ? await prisma.supplier.findUnique({ where: { id: pid }, select: { openingBalance: true } })
+        : null;
+      recordOpening = (await recordOpeningVisible()) ? num(p?.openingBalance) : 0; // natural sign for both (customer Dr, supplier Cr)
+    }
+    const opening = r2(natural(acc.type, openDr, openCr) + recordOpening);
     let running = opening;
     let totDr = 0;
     let totCr = 0;
@@ -153,6 +178,26 @@ ledger.get(
           closingCredit: net < 0 ? -net : 0,
         };
       });
+    // ?parties=1: customer / supplier heads under Trade Debtors / Trade Creditors (breakdown only, not in totals)
+    if (req.query.parties === '1') {
+      for (const side of ['CUSTOMER', 'SUPPLIER'] as const) {
+        const ph = await partyHeads(side, { from, to: asOf });
+        if (!ph.control) continue;
+        const at = rows.findIndex((r) => r.id === ph.control!.id);
+        if (at < 0) continue;
+        const lvl = rows[at].level + 1;
+        const heads = [...ph.rows, ...(ph.unallocated ? [ph.unallocated] : [])].map((h) => {
+          const o = drCr(side, h.opening);
+          const c = drCr(side, h.closing);
+          return {
+            id: -(h.partyId ?? 0) - (side === 'SUPPLIER' ? 1e7 : 0) - 1, code: h.code, name: h.name, type: rows[at].type, parentId: ph.control!.id, isGroup: false, level: lvl,
+            party: true, partyType: side, partyId: h.partyId,
+            openingDebit: from && h.partyId ? o.debit : 0, openingCredit: from && h.partyId ? o.credit : 0, debit: h.debit, credit: h.credit, closingDebit: c.debit, closingCredit: c.credit,
+          };
+        });
+        rows.splice(at + 1, 0, ...(heads as typeof rows));
+      }
+    }
     const leaves = accs.filter((a) => !a.isGroup);
     let td = 0;
     let tc = 0;
@@ -474,7 +519,7 @@ async function vatRows(from: Date | undefined, to: Date | undefined, typeFilter?
       }
       const cust = cm.get(inv.customerId);
       for (const [rate, g] of groups) {
-        const r = resolve(rate, cust?.vatCategory);
+        const r = resolve(rate, inv.vatExempt ? 'EXEMPT' : cust?.vatCategory);
         out.push({ type: 'SALES', docType: 'SALES_INVOICE', docId: inv.id, docNo: inv.docNo, date: inv.docDate, partyType: 'CUSTOMER', partyId: inv.customerId, trn: inv.trn ?? cust?.trn, vatCode: r.code, category: r.category, rate, taxable: r2(g.taxable * ex), vatAmount: r2(g.vat * ex) });
       }
     }
@@ -605,8 +650,9 @@ fin.get(
       prisma.customer.aggregate({ _sum: { openingBalance: true } }),
       prisma.supplier.aggregate({ _sum: { openingBalance: true } }),
     ]);
-    const receivables = r2(num(custOpen._sum.openingBalance) + num(arAgg._sum.debit) - num(arAgg._sum.credit));
-    const payables = r2(num(suppOpen._sum.openingBalance) + num(apAgg._sum.credit) - num(apAgg._sum.debit));
+    const of = (await recordOpeningVisible()) ? 1 : 0; // record opening balances belong to the default BU
+    const receivables = r2(of * num(custOpen._sum.openingBalance) + num(arAgg._sum.debit) - num(arAgg._sum.credit));
+    const payables = r2(of * num(suppOpen._sum.openingBalance) + num(apAgg._sum.credit) - num(apAgg._sum.debit));
     const cashBank = cashAgg.map((c) => ({ accountId: c.accountId, balance: r2(num(c._sum.debit) - num(c._sum.credit)) }));
     const cashBankTotal = r2(cashBank.reduce((s, c) => s + c.balance, 0));
 

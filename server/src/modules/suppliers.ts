@@ -9,6 +9,9 @@ import { notFound } from '../lib/errors';
 import { supplierBalance } from '../services/accounting';
 import { nextCode, dimensionMaps } from '../services/admin-master';
 import { num, r2 } from '../lib/calc';
+import { linkedLedger } from '../services/party-heads';
+import { webUrl } from './customers';
+import { recordOpeningVisible } from '../lib/bu';
 import type { ModuleDef } from '../app';
 
 const PERM = 'suppliers';
@@ -32,6 +35,7 @@ export const supplierSchema = z.object({
     .email()
     .nullish()
     .or(z.literal('').transform(() => null)),
+  website: webUrl,
   address: opt,
   currencyCode: z.string().trim().min(2).max(10).optional(),
   paymentTermId: optId,
@@ -47,7 +51,7 @@ async function decorate<T extends { id: number; paymentTermId: number | null; cr
   const m = await dimensionMaps();
   const balances = new Map<number, number>();
   if (rows.length) {
-    const ap = await prisma.account.findUnique({ where: { systemKey: 'AP' } });
+    const ap = await prisma.account.findFirst({ where: { systemKey: 'AP' } });
     if (ap) {
       const agg = await prisma.journalLine.groupBy({
         by: ['partyId'],
@@ -57,8 +61,9 @@ async function decorate<T extends { id: number; paymentTermId: number | null; cr
       for (const a of agg) balances.set(a.partyId!, num(a._sum.credit) - num(a._sum.debit));
     }
   }
+  const withOpening = await recordOpeningVisible(); // record opening balances belong to the default BU
   return rows.map((r) => {
-    const balance = r2(num((r as unknown as { openingBalance: unknown }).openingBalance) + (balances.get(r.id) ?? 0));
+    const balance = r2((withOpening ? num((r as unknown as { openingBalance: unknown }).openingBalance) : 0) + (balances.get(r.id) ?? 0));
     return {
       ...r,
       paymentTerm: r.paymentTermId ? m.term.get(r.paymentTermId) ?? null : null,
@@ -136,6 +141,7 @@ r.get(
       totalInvoices: invAgg._count._all,
       totalPurchases: r2(num(invAgg._sum.baseTotal)),
       lastOrder: lastPo,
+      ledger: await linkedLedger('SUPPLIER', id, balance),
     });
   }),
 );

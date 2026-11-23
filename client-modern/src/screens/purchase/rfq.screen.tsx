@@ -20,11 +20,12 @@ import {
   strOrNull, TransitionDef, useAsk, useDocForm, useLookups, PickModal, FV, SupplierSelect,
 } from '@/components/purchase/kit';
 import { SupplierMulti } from '@/components/purchase/SupplierMulti';
+import { NewEnquiryPicker, NewQuotationPicker } from '@/components/purchase/pickers';
 import { applySupplierDefaults, pickPurchaseProduct } from '@/components/purchase/helpers';
 import { useWatch } from 'react-hook-form';
 
 /* =============================================================== ENQUIRY (RFQ) */
-const ENQ_STATUSES = ['DRAFT', 'SENT', 'QUOTED', 'CLOSED', 'CANCELLED'];
+const ENQ_STATUSES = ['DRAFT', 'SENT', 'PARTIALLY_QUOTED', 'QUOTED', 'CLOSED', 'CANCELLED'];
 interface EnqRow { id: number; docNo: string; docDate: string; requiredDate?: string; warehouse?: { name: string } | null; itemCount: number; supplierCount: number; respondedCount: number; status: string }
 
 function PurchaseEnquiriesScreen() {
@@ -39,7 +40,7 @@ function PurchaseEnquiriesScreen() {
     { key: 'status', header: 'Status', type: 'status', width: 110 },
   ];
   return (
-    <PurchaseList<EnqRow> tableKey="purchase-enquiries" url="/purchase-enquiries" title="Purchase Enquiry" formScreen="purchase-enquiry-form" module="purchase_enquiry" columns={cols} statuses={ENQ_STATUSES} newLabel="New Enquiry"
+    <PurchaseList<EnqRow> tableKey="purchase-enquiries" url="/purchase-enquiries" title="Purchase Enquiry" formScreen="purchase-enquiry-form" module="purchase_enquiry" columns={cols} statuses={ENQ_STATUSES} newLabel="New Enquiry" picker={(p) => <NewEnquiryPicker {...p} />}
       rowActions={(r, open) => [{ label: 'Comparative Statement', icon: GitCompare, hidden: (x) => x.status === 'DRAFT' || x.status === 'CANCELLED', onClick: () => { open('comparative-statement-form', { id: r.id }, `CS ${r.docNo}`); } }]} />
   );
 }
@@ -75,8 +76,8 @@ function PurchaseEnquiryForm({ params, tabId }: ScreenProps) {
   const onSave = ctl.save(payload);
   const transitions: TransitionDef[] = [
     { action: 'send', label: 'Send to Suppliers', icon: Send, from: ['DRAFT'], perm: 'edit', variant: 'primary', saveFirst: true },
-    { action: 'close', label: 'Close', icon: Lock, from: ['SENT', 'QUOTED'], perm: 'edit', ask: { title: 'Close enquiry', message: 'Close this enquiry?' } },
-    { action: 'cancel', label: 'Cancel', icon: XCircle, from: ['DRAFT', 'SENT', 'QUOTED'], perm: 'cancel', variant: 'danger', ask: { title: 'Cancel enquiry', danger: true, message: 'Cancel this enquiry?' } },
+    { action: 'close', label: 'Close', icon: Lock, from: ['SENT', 'PARTIALLY_QUOTED', 'QUOTED'], perm: 'edit', ask: { title: 'Close enquiry', message: 'Close this enquiry?' } },
+    { action: 'cancel', label: 'Cancel', icon: XCircle, from: ['DRAFT', 'SENT', 'PARTIALLY_QUOTED', 'QUOTED'], perm: 'cancel', variant: 'danger', ask: { title: 'Cancel enquiry', danger: true, message: 'Cancel this enquiry?' } },
   ];
 
   const call = async (fn: () => Promise<unknown>, okMsg?: string) => {
@@ -94,7 +95,7 @@ function PurchaseEnquiryForm({ params, tabId }: ScreenProps) {
 
   const quotations: any[] = doc.data?.quotations ?? [];
   const enquirySuppliers: any[] = doc.data?.suppliers ?? [];
-  const canManage = ['DRAFT', 'SENT', 'QUOTED'].includes(status ?? '') && !doc.isNew;
+  const canManage = ['DRAFT', 'SENT', 'PARTIALLY_QUOTED', 'QUOTED'].includes(status ?? '') && !doc.isNew;
 
   return (
     <FormProvider {...form}>
@@ -210,7 +211,7 @@ function PurchaseEnquiryForm({ params, tabId }: ScreenProps) {
 }
 
 /* =============================================================== SUPPLIER QUOTATION */
-const Q_STATUSES = ['RECEIVED', 'SELECTED', 'CONVERTED', 'REJECTED', 'EXPIRED'];
+const Q_STATUSES = ['RECEIVED', 'SELECTED', 'PARTIALLY_CONVERTED', 'CONVERTED', 'REJECTED', 'EXPIRED'];
 interface QRow { id: number; docNo: string; docDate: string; supplier?: { name: string }; supplierRef?: string; validUntil?: string; currencyCode: string; total: number; baseTotal: number; status: string; expectedDeliveryDate?: string }
 
 function SupplierQuotationsScreen() {
@@ -226,7 +227,7 @@ function SupplierQuotationsScreen() {
     { key: 'baseTotal', header: 'Total (Base)', type: 'money', total: 'sum', sortable: false },
     { key: 'status', header: 'Status', type: 'status', width: 110 },
   ];
-  return <PurchaseList<QRow> tableKey="supplier-quotations" url="/supplier-quotations" title="Supplier Quotation" formScreen="supplier-quotation-form" module="supplier_quotation" columns={cols} statuses={Q_STATUSES} newLabel="New Quotation" />;
+  return <PurchaseList<QRow> tableKey="supplier-quotations" url="/supplier-quotations" title="Supplier Quotation" formScreen="supplier-quotation-form" module="supplier_quotation" columns={cols} statuses={Q_STATUSES} newLabel="New Quotation" picker={(p) => <NewQuotationPicker {...p} />} />;
 }
 
 const quoteSchema = z.object({
@@ -279,7 +280,7 @@ function SupplierQuotationForm({ params, tabId }: ScreenProps) {
   const transitions: TransitionDef[] = [
     { action: 'reject', label: 'Reject', icon: XCircle, from: ['RECEIVED', 'SELECTED'], perm: 'reject', variant: 'danger', ask: { title: 'Reject quotation', danger: true, message: 'Reject this quotation?' } },
   ];
-  const canPo = !doc.isNew && (doc.data?.enquiryId ? status === 'SELECTED' : ['RECEIVED', 'SELECTED'].includes(status ?? ''));
+  const canPo = !doc.isNew && (doc.data?.enquiryId ? ['SELECTED', 'PARTIALLY_CONVERTED'].includes(status ?? '') : ['RECEIVED', 'SELECTED', 'PARTIALLY_CONVERTED'].includes(status ?? ''));
   const createPo = async (v: Record<string, string>) => {
     const po = await ctl.run('create-order', { warehouseId: idOrNull(v.warehouseId) ?? undefined });
     if (po) {
@@ -464,7 +465,7 @@ function ComparativeStatementForm({ params, tabId }: ScreenProps) {
       title="Comparative Statement" icon={GitCompare} docNo={d?.enquiry.docNo} status={d?.enquiry.status} loading={q.isLoading} error={q.error ? apiError(q.error) : undefined}
       actions={
         <>
-          <DocAction icon={Trophy} variant="primary" hidden={!d?.selectedQuotationId || selectedQ?.status !== 'SELECTED' || !can('purchase_order', 'create')} onClick={() => setPoOpen(true)}>Convert to Purchase Order</DocAction>
+          <DocAction icon={Trophy} variant="primary" hidden={!d?.selectedQuotationId || !['SELECTED', 'PARTIALLY_CONVERTED'].includes(selectedQ?.status ?? '') || !can('purchase_order', 'create')} onClick={() => setPoOpen(true)}>Convert to Purchase Order</DocAction>
           <DocAction icon={ExternalLink} hidden={!d} onClick={() => open('purchase-enquiry-form', { id: d!.enquiry.id }, d!.enquiry.docNo)}>Open Enquiry</DocAction>
           <DocAction icon={Plus} hidden={!d || !['SENT', 'QUOTED'].includes(d.enquiry.status) || !can('supplier_quotation', 'create')} onClick={() => open('supplier-quotation-form', { enquiryId: d!.enquiry.id }, 'New Quotation')}>Add Quotation</DocAction>
           <DocAction onClick={refresh}>Refresh</DocAction>

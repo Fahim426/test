@@ -97,7 +97,7 @@ async function openPurchaseInvoices(supplierId?: number, tx: Tx | typeof prisma 
 
 /** settled part of an advance voucher = net credit on ADVANCE_TO_SUPPLIERS from ADVANCE_SETTLEMENT journals */
 async function advanceSettled(voucherId: number, tx: Tx | typeof prisma = prisma) {
-  const adv = await tx.account.findUnique({ where: { systemKey: 'ADVANCE_TO_SUPPLIERS' } });
+  const adv = await tx.account.findFirst({ where: { systemKey: 'ADVANCE_TO_SUPPLIERS' } });
   if (!adv) return 0;
   const agg = await tx.journalLine.aggregate({ where: { accountId: adv.id, journal: { sourceType: 'ADVANCE_SETTLEMENT', sourceId: voucherId } }, _sum: { debit: true, credit: true } });
   return r2(num(agg._sum.credit) - num(agg._sum.debit));
@@ -112,7 +112,7 @@ async function presentVoucher(id: number) {
     v.journalId ? prisma.journalEntry.findUnique({ where: { id: v.journalId }, include: { lines: true } }) : null,
   ]);
   const pn = await partyNames([{ partyType: v.partyType, partyId: v.partyId }]);
-  const bc = await prisma.account.findUnique({ where: { systemKey: 'BANK_CHARGES' } });
+  const bc = await prisma.account.findFirst({ where: { systemKey: 'BANK_CHARGES' } });
   const bankCharges = journal && bc ? r2(journal.lines.filter((l) => l.accountId === bc.id).reduce((s, l) => s + num(l.debit) - num(l.credit), 0)) : 0;
   const advanceAmount = r2(v.allocations.filter((a) => a.docType === 'PURCHASE_ORDER').reduce((s, a) => s + num(a.amount), 0));
   const settled = advanceAmount ? await advanceSettled(v.id) : 0;

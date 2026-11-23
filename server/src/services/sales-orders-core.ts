@@ -71,7 +71,8 @@ export async function approveOrderTx(tx: Tx, orderId: number, user?: Request['us
   const o = await tx.salesOrder.findUniqueOrThrow({ where: { id: orderId } });
   if (!['PENDING_APPROVAL', 'DRAFT'].includes(o.status)) throw badRequest(`Cannot approve: order status is ${o.status}`);
   await creditCheck(tx, o); // block mode throws; warnings are recomputed by callers
-  const allow = backorderOverride.get(orderId) ?? (await boolSetting('sales.allowBackorder', false, tx));
+  // negative-stock selling (temporary, until go-live) never stops on a shortage
+  const allow = backorderOverride.get(orderId) ?? ((await boolSetting('sales.allowBackorder', false, tx)) || (await boolSetting('sales.allowNegativeStock', false, tx)));
   const r = await reserveForOrder(tx, orderId, allow);
   await tx.salesOrder.update({ where: { id: orderId }, data: { status: 'APPROVED' } });
   await audit(tx, user, 'APPROVE', 'SalesOrder', orderId, { reserved: r.reserved, backorder: r.shortages });

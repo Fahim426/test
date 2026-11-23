@@ -13,6 +13,7 @@ import { num, r2, r3 } from '../lib/calc';
 import {
   approveOrder, rejectOrder, assertStatus, baseCurrency, buildOrderData, createPurchaseOrder, deleteLinks, finishDoc, IMPORT_RECEIVABLE, listDocs, orderDetail, orderQtys, orderRow, poSchema, resolveRate, submitOrder,
 } from '../services/purchase-common';
+import { syncParentsMiddleware, syncSourceStatus, takePending } from '../services/pending';
 import type { ModuleDef } from '../app';
 
 const T = { timeout: 30000 };
@@ -120,7 +121,7 @@ async function createProforma(tx: Tx, raw: any, user: { id: number; username: st
   if (b.importRequestId) {
     reqDoc = await tx.importRequest.findUnique({ where: { id: b.importRequestId }, include: { items: true } });
     assertStatus(reqDoc, ['APPROVED', 'PROFORMA_RECEIVED'], 'receive proforma (import request must be APPROVED)');
-    if (!items?.length) items = reqDoc.items.map((i: any) => ({ productId: i.productId, description: i.description, qty: num(i.qty), unit: i.unit, rate: 0 }));
+    if (!items?.length) items = await takePending(tx, 'IR_SP', reqDoc.id, reqDoc.items as any[], (i: any, qty) => ({ productId: i.productId, description: i.description, qty, unit: i.unit, rate: 0 }), `import request ${reqDoc.docNo}`);
   }
   if (!items?.length) throw badRequest('Proforma needs at least one item');
   const filled = await fillItems(items);
@@ -207,15 +208,19 @@ sp.post('/:id/create-order', can(IMP, 'create'), ah(async (req, res) => {
   }), req.body ?? {});
   const po = await prisma.$transaction(async (tx) => {
     const p: any = await tx.supplierProforma.findUnique({ where: { id }, include: { items: true } });
-    assertStatus(p, ['RECEIVED'], 'create order');
+    assertStatus(p, ['RECEIVED', 'PARTIALLY_CONVERTED', 'CONVERTED'], 'create order');
     if (p.items.some((i: any) => !i.productId)) throw badRequest('All proforma items must be linked to a product before creating the import PO');
+    // first conversion copies everything; later ones only what is still pending
+    const items = await takePending(tx, 'SP_PO', id, p.items as any[], (i: any, qty) => ({ productId: i.productId, description: i.description, qty, unit: i.unit, rate: num(i.rate), discount: 0, vatRate: 0 }), `proforma ${p.docNo}`);
     const reqDoc = p.importRequestId ? await tx.importRequest.findUnique({ where: { id: p.importRequestId } }) : null;
     const created = await createPurchaseOrder(tx, {
       ...o, roundOff: 0, docDate: o.docDate, supplierId: p.supplierId, quotationRef: p.supplierRef ?? p.docNo, importRequestId: p.importRequestId, warehouseId: o.warehouseId ?? reqDoc?.warehouseId ?? null,
       currencyCode: p.currencyCode, exchangeRate: num(p.exchangeRate), incoterms: o.incoterms ?? p.incoterms, remarks: o.remarks ?? p.remarks,
-      items: p.items.map((i: any) => ({ productId: i.productId, description: i.description, qty: num(i.qty), unit: i.unit, rate: num(i.rate), discount: 0, vatRate: 0 })),
+      items,
     }, 'IMPORT', req.user!.id);
+    await tx.purchaseOrder.update({ where: { id: created.id }, data: { supplierProformaId: id } });
     await tx.supplierProforma.update({ where: { id }, data: { status: 'CONVERTED' } });
+    await syncSourceStatus(tx, 'SUPPLIER_PROFORMA', id);
     if (reqDoc) await tx.importRequest.update({ where: { id: reqDoc.id }, data: { status: 'CONVERTED' } });
     await linkDocs(tx, { type: 'SUPPLIER_PROFORMA', id, no: p.docNo }, { type: 'IMPORT_PURCHASE_ORDER', id: created.id, no: created.docNo });
     await audit(tx, req.user, 'CREATE', 'PurchaseOrder', created.id, { from: p.docNo, orderType: 'IMPORT' });
@@ -243,6 +248,7 @@ const TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 const io = Router();
+io.use('/:id', syncParentsMiddleware('PURCHASE_ORDER'));
 io.get('/', can(IMP, 'view'), ah(async (req, res) => {
   res.json(await listDocs(req, {
     model: 'purchaseOrder', search: ['docNo', 'quotationRef', 'remarks', 'incoterms'], supplierSearch: true, numeric: ['supplierId', 'warehouseId'], strings: ['incoterms', 'shippingMethod'],

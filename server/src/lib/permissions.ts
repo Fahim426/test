@@ -28,6 +28,7 @@ export const PERMISSION_MODULES = [
   'picking',
   'packing',
   'delivery_note',
+  'sales_incentive',
   'sales_invoice',
   'sales_return',
   // inventory
@@ -47,6 +48,8 @@ export const PERMISSION_MODULES = [
   'report_builder',
   // amc
   'amc',
+  // e-invoice
+  'einvoice',
   // hr
   'hr_employees',
   'hr_attendance',

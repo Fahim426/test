@@ -41,6 +41,12 @@ const company: MasterConfig = {
   ],
 };
 
+const businessUnit = simple('business-units', 'Business Unit', '/business-units', [
+  { key: 'legalName', label: 'Legal name', span: 2, hint: 'Printed on the documents of this BU instead of the Company name (leave empty to use the Company)' },
+  { key: 'trn', label: 'TRN', maxLength: 40, hint: 'Leave empty to use the Company TRN' },
+  { key: 'address', label: 'Address', span: 2 },
+]);
+
 const branch = simple('branches', 'Branch', '/branches', [{ key: 'address', label: 'Address', span: 2 }]);
 
 const categories: MasterConfig = simple('categories', 'Category', '/categories', [
@@ -52,10 +58,17 @@ const brands = simple('brands', 'Brand', '/brands', [{ key: 'country', label: 'C
 const salesmen = simple('salesmen', 'Salesman', '/salesmen', [
   { key: 'phone', label: 'Phone' },
   { key: 'email', label: 'Email', type: 'email' },
-  { key: 'commissionPct', label: 'Commission %', type: 'number', min: 0, max: 100, listType: 'percent', default: 0 },
-]);
+  { key: 'commissionPct', label: 'Commission %', type: 'number', min: 0, max: 100, listType: 'percent', default: 0 },]);
 
 const paymentTerms = simple('payment-terms', 'Payment Term', '/payment-terms', [
+  {
+    key: 'basis', label: 'Days counted from', type: 'select', valueType: 'string', default: 'INVOICE_DATE', required: true, listWidth: 170,
+    options: [
+      { value: 'INVOICE_DATE', label: 'Invoice date' },
+      { value: 'NEXT_MONTH', label: '1st of next month' },
+    ],
+    hint: 'Invoice dated 15-Nov, 30 days: invoice date -> due 15-Dec; 1st of next month -> due 31-Dec (0 days -> 1-Dec)',
+  },
   { key: 'days', label: 'Days', type: 'number', min: 0, default: 0, required: true },
 ]);
 
@@ -93,7 +106,7 @@ const vatCodes: MasterConfig = {
 
 export default [
   { id: 'companies', title: 'Companies', icon: Building2, component: masterScreen(company), permission: 'dimensions' },
-  { id: 'business-units', title: 'Business Units', icon: Briefcase, component: masterScreen(simple('business-units', 'Business Unit', '/business-units')), permission: 'dimensions' },
+  { id: 'business-units', title: 'Business Units', icon: Briefcase, component: masterScreen(businessUnit), permission: 'dimensions' },
   { id: 'branches', title: 'Branches', icon: Store, component: masterScreen(branch), permission: 'dimensions' },
   { id: 'categories', title: 'Categories', icon: FolderTree, component: masterScreen(categories), permission: 'dimensions' },
   { id: 'brands', title: 'Brands', icon: Tag, component: masterScreen(brands), permission: 'dimensions' },

@@ -3,7 +3,7 @@ import { Router, Request } from 'express';
 import { z } from 'zod';
 import { prisma, Tx } from '../lib/prisma';
 import { ah, parse, intParam, paged } from '../lib/http';
-import { badRequest, conflict } from '../lib/errors';
+import { badRequest } from '../lib/errors';
 import { can } from '../middleware/auth';
 import { enrich } from '../lib/enrich';
 import { nextNumber } from '../services/numbering';
@@ -15,9 +15,11 @@ import {
   buildListWhere, lineIn, prepareLines, resolveRate, defaultWarehouseId, mustCustomer, mustFound, mustStatus, num, r2, LineIn,
 } from '../services/sales-common';
 import { approveOrderTx, rejectOrderTx, creditCheck, orderDetail, summary, backorderOverride } from '../services/sales-orders-core';
+import { syncParentsMiddleware, syncSourceStatus, takePending } from '../services/pending';
 import type { ModuleDef } from '../app';
 
 const router = Router();
+router.use('/:id', syncParentsMiddleware('SALES_ORDER'));
 
 const bodySchema = z.object({
   docDate: z.coerce.date().optional(),
@@ -155,12 +157,46 @@ router.delete('/:id', can('sales_order', 'delete'), ah(async (req, res) => {
 /** When an order created from a quotation / proforma goes away, re-open its source. */
 async function detachSources(tx: Tx, o: { id: number; quotationId: number | null; proformaId: number | null }) {
   if (o.proformaId) {
-    await tx.proformaInvoice.updateMany({ where: { id: o.proformaId, status: 'CONVERTED' }, data: { status: 'ISSUED', salesOrderId: null } });
+    const live = await tx.salesOrder.findFirst({ where: { proformaId: o.proformaId, status: { not: 'CANCELLED' }, id: { not: o.id } }, orderBy: { id: 'desc' } });
+    await tx.proformaInvoice.updateMany({ where: { id: o.proformaId, salesOrderId: o.id }, data: { salesOrderId: live?.id ?? null } });
+    await syncSourceStatus(tx, 'PROFORMA_INVOICE', o.proformaId);
   }
-  if (o.quotationId) {
-    const live = await tx.salesOrder.count({ where: { quotationId: o.quotationId, status: { not: 'CANCELLED' }, id: { not: o.id } } });
-    if (!live) await tx.salesQuotation.updateMany({ where: { id: o.quotationId, status: 'CONVERTED' }, data: { status: 'ACCEPTED' } });
-  }
+  if (o.quotationId) await syncSourceStatus(tx, 'SALES_QUOTATION', o.quotationId);
+}
+
+/**
+ * DRAFT -> PENDING_APPROVAL; credit check (warnings) and the approval workflow. Without a required approval the order is
+ * approved at once and its stock reserved (throws on shortage unless backorders are allowed).
+ */
+export async function submitOrderTx(tx: Tx, id: number, user: Request['user']): Promise<{ warnings: string[]; autoApproved: boolean }> {
+  const o = mustFound(await tx.salesOrder.findUnique({ where: { id }, include: { items: true } }), 'Sales order');
+  mustStatus(o, ['DRAFT'], 'submit');
+  if (!o.items.length) throw badRequest('Order has no items');
+  const warnings = await creditCheck(tx, o);
+  await tx.salesOrder.update({ where: { id }, data: { status: 'PENDING_APPROVAL' } });
+  const baseTotal = r2(num(o.total) * (num(o.exchangeRate) || 1));
+  const sub = await submitForApproval(tx, { docType: 'SALES_ORDER', docId: id, docNo: o.docNo, amount: baseTotal, userId: user?.id });
+  await audit(tx, user, 'SUBMIT', 'SalesOrder', id, { required: sub.required, baseTotal });
+  if (sub.required) return { warnings, autoApproved: false };
+  await approveOrderTx(tx, id, user);
+  return { warnings, autoApproved: true };
+}
+
+/** Cancels an order that has nothing delivered/invoiced: releases reservations and closes pending approvals. */
+export async function cancelOrderTx(tx: Tx, id: number, user: Request['user']) {
+  const o = mustFound(await tx.salesOrder.findUnique({ where: { id }, include: { items: true } }), 'Sales order');
+  mustStatus(o, ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'], 'cancel');
+  if (o.items.some((i) => num(i.deliveredQty) > 0 || num(i.invoicedQty) > 0)) throw badRequest('Order has deliveries or invoices; close it instead of cancelling');
+  const pick = await tx.pickingList.count({ where: { salesOrderId: id, status: { not: 'CANCELLED' } } });
+  const dn = await tx.deliveryNote.count({ where: { salesOrderId: id, status: { not: 'CANCELLED' } } });
+  const pk = await tx.packingList.count({ where: { salesOrderId: id, status: { not: 'CANCELLED' } } });
+  const inv = await tx.salesInvoice.count({ where: { salesOrderId: id, status: { not: 'CANCELLED' } } });
+  if (pick || dn || pk || inv) throw badRequest('Cancel the delivery notes and invoices first');
+  await releaseOrderReservations(tx, id);
+  await tx.approvalRequest.updateMany({ where: { docType: 'SALES_ORDER', docId: id, status: 'PENDING' }, data: { status: 'REJECTED' } });
+  await tx.salesOrder.update({ where: { id }, data: { status: 'CANCELLED' } });
+  await detachSources(tx, o);
+  await audit(tx, user, 'CANCEL', 'SalesOrder', id, { from: o.status });
 }
 
 /* ---------------- workflow ---------------- */
@@ -168,27 +204,15 @@ router.post('/:id/submit', can('sales_order', 'edit'), ah(async (req, res) => {
   const id = intParam(req);
   const allow = req.query.allowBackorder !== undefined ? String(req.query.allowBackorder) !== 'false' : undefined;
   if (allow !== undefined) backorderOverride.set(id, allow);
-  let warnings: string[] = [];
-  let autoApproved = false;
+  let r = { warnings: [] as string[], autoApproved: false };
   try {
     await prisma.$transaction(async (tx) => {
-      const o = mustFound(await tx.salesOrder.findUnique({ where: { id }, include: { items: true } }), 'Sales order');
-      mustStatus(o, ['DRAFT'], 'submit');
-      if (!o.items.length) throw badRequest('Order has no items');
-      warnings = await creditCheck(tx, o);
-      await tx.salesOrder.update({ where: { id }, data: { status: 'PENDING_APPROVAL' } });
-      const baseTotal = r2(num(o.total) * (num(o.exchangeRate) || 1));
-      const sub = await submitForApproval(tx, { docType: 'SALES_ORDER', docId: id, docNo: o.docNo, amount: baseTotal, userId: req.user?.id });
-      await audit(tx, req.user, 'SUBMIT', 'SalesOrder', id, { required: sub.required, baseTotal });
-      if (!sub.required) {
-        await approveOrderTx(tx, id, req.user);
-        autoApproved = true;
-      }
+      r = await submitOrderTx(tx, id, req.user);
     }, { timeout: 30000 });
   } finally {
     backorderOverride.delete(id);
   }
-  res.json({ ...(await orderDetail(id)), warnings, autoApproved });
+  res.json({ ...(await orderDetail(id)), ...r });
 }));
 
 router.post('/:id/approve', can('sales_order', 'approve'), ah(async (req, res) => {
@@ -229,21 +253,7 @@ router.post('/:id/reject', can('sales_order', 'reject'), ah(async (req, res) => 
 
 router.post('/:id/cancel', can('sales_order', 'cancel'), ah(async (req, res) => {
   const id = intParam(req);
-  await prisma.$transaction(async (tx) => {
-    const o = mustFound(await tx.salesOrder.findUnique({ where: { id }, include: { items: true } }), 'Sales order');
-    mustStatus(o, ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'], 'cancel');
-    if (o.items.some((i) => num(i.deliveredQty) > 0 || num(i.invoicedQty) > 0)) throw badRequest('Order has deliveries or invoices; close it instead of cancelling');
-    const pick = await tx.pickingList.count({ where: { salesOrderId: id, status: { not: 'CANCELLED' } } });
-    const dn = await tx.deliveryNote.count({ where: { salesOrderId: id, status: { not: 'CANCELLED' } } });
-    const pk = await tx.packingList.count({ where: { salesOrderId: id, status: { not: 'CANCELLED' } } });
-    const inv = await tx.salesInvoice.count({ where: { salesOrderId: id, status: { not: 'CANCELLED' } } });
-    if (pick || dn || pk || inv) throw badRequest('Cancel the order\'s picking lists, packing lists, delivery notes and invoices first');
-    await releaseOrderReservations(tx, id);
-    await tx.approvalRequest.updateMany({ where: { docType: 'SALES_ORDER', docId: id, status: 'PENDING' }, data: { status: 'REJECTED' } });
-    await tx.salesOrder.update({ where: { id }, data: { status: 'CANCELLED' } });
-    await detachSources(tx, o);
-    await audit(tx, req.user, 'CANCEL', 'SalesOrder', id, { from: o.status });
-  }, { timeout: 30000 });
+  await prisma.$transaction((tx) => cancelOrderTx(tx, id, req.user), { timeout: 30000 });
   res.json(await orderDetail(id));
 }));
 
@@ -273,20 +283,21 @@ fromQuotation.post('/:id/create-order', can('sales_order', 'create'), ah(async (
   const opts = parse(optsSchema, req.body ?? {});
   const oid = await prisma.$transaction(async (tx) => {
     const q = mustFound(await tx.salesQuotation.findUnique({ where: { id }, include: { items: true } }), 'Sales quotation');
-    mustStatus(q, ['DRAFT', 'SENT', 'ACCEPTED'], 'create order');
+    mustStatus(q, ['DRAFT', 'SENT', 'ACCEPTED', 'PARTIALLY_CONVERTED', 'CONVERTED'], 'create order');
     if (q.validUntil && q.validUntil < new Date(new Date().setHours(0, 0, 0, 0))) {
       await tx.salesQuotation.update({ where: { id }, data: { status: 'EXPIRED' } });
       throw badRequest(`Quotation ${q.docNo} expired on ${q.validUntil.toISOString().slice(0, 10)}`);
     }
-    const dup = await tx.salesOrder.findFirst({ where: { quotationId: id, status: { not: 'CANCELLED' } } });
-    if (dup) throw conflict(`Quotation already converted to order ${dup.docNo}`);
+    // first conversion copies everything; later ones only what is still pending (not yet ordered / closed)
+    const items = await takePending(tx, 'SQ_SO', id, q.items, (i, qty) => ({ productId: i.productId, qty, rate: num(i.rate), discount: r2(num(i.discount) * qty / (num(i.qty) || 1)), vatRate: num(i.vatRate), description: i.description, oemNumber: i.oemNumber, unit: i.unit }), `quotation ${q.docNo}`);
     const o = await createOrderTx(tx, req.user, {
       customerId: q.customerId, salesmanId: q.salesmanId, quotationId: q.id, warehouseId: opts.warehouseId ?? q.warehouseId, currencyCode: q.currencyCode,
       exchangeRate: num(q.exchangeRate), paymentTerms: q.paymentTerms, customerPoNo: opts.customerPoNo, deliveryDate: opts.deliveryDate,
-      remarks: opts.remarks ?? q.remarks, terms: q.terms, roundOff: num(q.roundOff),
-      items: q.items.map((i) => ({ productId: i.productId, qty: num(i.qty), rate: num(i.rate), discount: num(i.discount), vatRate: num(i.vatRate), description: i.description, oemNumber: i.oemNumber, unit: i.unit })),
+      remarks: opts.remarks ?? q.remarks, terms: q.terms, roundOff: items.length === q.items.length && items.every((x, k) => x.qty === num(q.items[k].qty)) ? num(q.roundOff) : 0,
+      items,
     });
     await tx.salesQuotation.update({ where: { id }, data: { status: 'CONVERTED' } });
+    await syncSourceStatus(tx, 'SALES_QUOTATION', id);
     await linkDocs(tx, { type: 'SALES_QUOTATION', id: q.id, no: q.docNo }, { type: 'SALES_ORDER', id: o.id, no: o.docNo });
     await audit(tx, req.user, 'CREATE_ORDER', 'SalesQuotation', id, { order: o.docNo });
     return o.id;
@@ -294,30 +305,34 @@ fromQuotation.post('/:id/create-order', can('sales_order', 'create'), ah(async (
   res.status(201).json(await orderDetail(oid));
 }));
 
+/** Creates the (draft) sales order behind a proforma from its still-pending quantities. */
+export async function orderFromProformaTx(tx: Tx, user: Request['user'], id: number, opts: z.infer<typeof optsSchema> = {}) {
+  const p = mustFound(await tx.proformaInvoice.findUnique({ where: { id }, include: { items: true } }), 'Proforma invoice');
+  mustStatus(p, ['DRAFT', 'ISSUED', 'PARTIALLY_CONVERTED', 'CONVERTED'], 'create order');
+  const items = await takePending(tx, 'PF_SO', id, p.items, (i, qty) => ({ productId: i.productId, qty, rate: num(i.rate), discount: r2(num(i.discount) * qty / (num(i.qty) || 1)), vatRate: num(i.vatRate), description: i.description, oemNumber: i.oemNumber, unit: i.unit }), `proforma ${p.docNo}`);
+  const q = p.quotationId ? await tx.salesQuotation.findUnique({ where: { id: p.quotationId } }) : null;
+  const o = await createOrderTx(tx, user, {
+    customerId: p.customerId, salesmanId: p.salesmanId ?? q?.salesmanId, quotationId: p.quotationId, proformaId: p.id, warehouseId: opts.warehouseId ?? p.warehouseId ?? q?.warehouseId,
+    currencyCode: p.currencyCode, exchangeRate: q ? num(q.exchangeRate) : undefined, paymentTerms: p.paymentTerms, customerPoNo: opts.customerPoNo, deliveryDate: opts.deliveryDate,
+    remarks: opts.remarks ?? p.remarks, terms: q?.terms,
+    items,
+  });
+  await tx.proformaInvoice.update({ where: { id }, data: { status: 'CONVERTED', salesOrderId: o.id } });
+  await syncSourceStatus(tx, 'PROFORMA_INVOICE', id);
+  if (p.quotationId) {
+    await tx.salesQuotation.updateMany({ where: { id: p.quotationId, status: { in: ['DRAFT', 'SENT', 'ACCEPTED'] } }, data: { status: 'CONVERTED' } });
+    await syncSourceStatus(tx, 'SALES_QUOTATION', p.quotationId);
+  }
+  await linkDocs(tx, { type: 'PROFORMA_INVOICE', id: p.id, no: p.docNo }, { type: 'SALES_ORDER', id: o.id, no: o.docNo });
+  await audit(tx, user, 'CREATE_ORDER', 'ProformaInvoice', id, { order: o.docNo });
+  return o;
+}
+
 const fromProforma = Router();
 fromProforma.post('/:id/create-order', can('sales_order', 'create'), ah(async (req, res) => {
   const id = intParam(req);
   const opts = parse(optsSchema, req.body ?? {});
-  const oid = await prisma.$transaction(async (tx) => {
-    const p = mustFound(await tx.proformaInvoice.findUnique({ where: { id }, include: { items: true } }), 'Proforma invoice');
-    mustStatus(p, ['DRAFT', 'ISSUED'], 'create order');
-    if (p.salesOrderId) {
-      const ex = await tx.salesOrder.findUnique({ where: { id: p.salesOrderId } });
-      if (ex && ex.status !== 'CANCELLED') throw conflict(`Proforma already converted to order ${ex.docNo}`);
-    }
-    const q = p.quotationId ? await tx.salesQuotation.findUnique({ where: { id: p.quotationId } }) : null;
-    const o = await createOrderTx(tx, req.user, {
-      customerId: p.customerId, salesmanId: q?.salesmanId, quotationId: p.quotationId, proformaId: p.id, warehouseId: opts.warehouseId ?? p.warehouseId ?? q?.warehouseId,
-      currencyCode: p.currencyCode, exchangeRate: q ? num(q.exchangeRate) : undefined, paymentTerms: p.paymentTerms, customerPoNo: opts.customerPoNo, deliveryDate: opts.deliveryDate,
-      remarks: opts.remarks ?? p.remarks, terms: q?.terms,
-      items: p.items.map((i) => ({ productId: i.productId, qty: num(i.qty), rate: num(i.rate), discount: num(i.discount), vatRate: num(i.vatRate), description: i.description, oemNumber: i.oemNumber, unit: i.unit })),
-    });
-    await tx.proformaInvoice.update({ where: { id }, data: { status: 'CONVERTED', salesOrderId: o.id } });
-    if (p.quotationId) await tx.salesQuotation.updateMany({ where: { id: p.quotationId, status: { in: ['DRAFT', 'SENT', 'ACCEPTED'] } }, data: { status: 'CONVERTED' } });
-    await linkDocs(tx, { type: 'PROFORMA_INVOICE', id: p.id, no: p.docNo }, { type: 'SALES_ORDER', id: o.id, no: o.docNo });
-    await audit(tx, req.user, 'CREATE_ORDER', 'ProformaInvoice', id, { order: o.docNo });
-    return o.id;
-  }, { timeout: 30000 });
+  const oid = await prisma.$transaction(async (tx) => (await orderFromProformaTx(tx, req.user, id, opts)).id, { timeout: 30000 });
   res.status(201).json(await orderDetail(oid));
 }));
 

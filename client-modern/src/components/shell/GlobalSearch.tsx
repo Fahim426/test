@@ -69,7 +69,7 @@ export function GlobalSearch() {
   return (
     <button
       onClick={() => setOpen(true)}
-      className="group flex h-9 w-full max-w-[380px] items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 text-left text-[13px] text-ink-faint shadow-card transition hover:border-line-strong hover:bg-surface"
+      className="group flex h-9 w-full items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 text-left text-[13px] text-ink-faint shadow-card transition hover:border-line-strong hover:bg-surface"
     >
       <Search size={15} />
       <span className="flex-1 truncate">Search products, customers, documents, screens...</span>

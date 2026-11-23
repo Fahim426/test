@@ -106,7 +106,7 @@ function PendingSalesOrdersScreen() {
 /* ----------------------------- Pending deliveries ----------------------------- */
 interface DNRow {
   id: number; docNo: string; docDate: string; status: string; invoiced?: boolean; totalQty: number; invoicedQty: number; driver?: string | null; vehicleNo?: string | null;
-  customer?: { name: string } | null; warehouse?: { name: string } | null; salesOrder?: { id: number; docNo: string } | null;
+  customer?: { name: string } | null; warehouse?: { name: string } | null; proforma?: { id: number; docNo: string } | null;
 }
 function PendingDeliveriesScreen() {
   const open = useOpenScreen();
@@ -114,7 +114,7 @@ function PendingDeliveriesScreen() {
   const columns: Column<DNRow>[] = [
     { key: 'docNo', header: 'DN No', width: 130 },
     { key: 'docDate', header: 'Date', type: 'date', width: 100, filter: 'date' },
-    { key: 'salesOrder.docNo', header: 'Sales Order', width: 130, sortable: false, cell: (r) => <DocLink type="SALES_ORDER" id={r.salesOrder?.id} no={r.salesOrder?.docNo} /> },
+    { key: 'proforma.docNo', header: 'Proforma', width: 130, sortable: false, cell: (r) => <DocLink type="PROFORMA_INVOICE" id={r.proforma?.id} no={r.proforma?.docNo} /> },
     { key: 'customer.name', header: 'Customer', sortable: false },
     { key: 'warehouse.name', header: 'Warehouse', width: 120, sortable: false },
     { key: 'driver', header: 'Driver', width: 100, sortable: false, hidden: true },

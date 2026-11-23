@@ -1,3 +1,4 @@
+import { useAuth } from '@/store/auth';
 import { useQuery } from '@tanstack/react-query';
 import { api, Paged } from '@/lib/api';
 
@@ -12,8 +13,10 @@ export interface Company {
 
 /** Company profile (first row of /api/companies). Falls back to null if unavailable. */
 export function useCompany() {
+  const token = useAuth(s => s.accessToken);
   return useQuery({
     queryKey: ['company'],
+    enabled: !!token,
     staleTime: 10 * 60_000,
     retry: false,
     queryFn: async (): Promise<Company | null> => {

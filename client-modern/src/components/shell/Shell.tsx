@@ -1,6 +1,4 @@
-import { TreeNavigation } from './TreeNavigation';
 import { TourBootstrap } from './TourBootstrap';
-import { useUi } from '@/store/ui';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, AuthUser } from '@/store/auth';
@@ -11,11 +9,13 @@ import { Topbar } from './Topbar';
 import { TabBar } from './TabBar';
 import { Workspace, Breadcrumb } from './Workspace';
 import { CommandPalette } from './CommandPalette';
+import { Sidebar } from './Sidebar';
+import { useUi } from '@/store/ui';
 
 export default function Shell() {
-  const treeMenu = useUi(s=>s.treeMenu);
   const token = useAuth((s) => s.accessToken);
   const nav = useNavigate();
+  const treeMenu = useUi((s) => s.treeMenu);
 
   // refresh the profile/permissions on load
   useEffect(() => {
@@ -30,6 +30,7 @@ export default function Shell() {
     const s = useWorkspaceStore.getState();
     if (s.tabs.length === 0) s.open({ screenId: 'dashboard' });
   }, []);
+
 
   // global shortcuts
   useEffect(() => {
@@ -54,16 +55,19 @@ export default function Shell() {
   }, []);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-canvas">
+    <div data-tour="workspace-modern" className="flex h-full flex-col overflow-hidden bg-canvas">
       <Topbar />
-      {!treeMenu && <div data-tour="ribbon"><MenuStrip /></div>}
-      <div className="flex min-h-0 flex-1"><TreeNavigation /><div className="flex min-w-0 flex-1 flex-col">
-      <div data-tour="tabs" className="shrink-0"><TabBar /></div>
-      <div className="no-print flex h-8 shrink-0 items-center border-b border-line bg-surface px-4">
-        <Breadcrumb />
+      {!treeMenu && <MenuStrip />}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {treeMenu && <Sidebar />}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <TabBar />
+          <div className="no-print flex h-8 shrink-0 items-center border-b border-line bg-surface px-4">
+            <Breadcrumb />
+          </div>
+          <Workspace />
+        </div>
       </div>
-      <Workspace />
-      </div></div>
       <TourBootstrap />
       <CommandPalette />
     </div>

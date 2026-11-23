@@ -45,7 +45,8 @@ const FK_EDGES: { child: string; fk: string; parent: string }[] = [
 ];
 
 const CHAINS = [
-  { key: 'SALES', label: 'Sales', types: ['SALES_QUOTATION', 'SALES_ORDER', 'PICKING_LIST', 'DELIVERY_NOTE', 'SALES_INVOICE', 'RECEIPT_VOUCHER'] },
+  // the sales order behind a proforma is internal: the flow still walks through it, but it is not shown as a stage
+  { key: 'SALES', label: 'Sales', types: ['SALES_QUOTATION', 'PROFORMA_INVOICE', 'DELIVERY_NOTE', 'SALES_INVOICE', 'RECEIPT_VOUCHER'] },
   { key: 'PURCHASE_LOCAL', label: 'Purchase (Local)', types: ['PURCHASE_REQUISITION', 'PURCHASE_ENQUIRY', 'SUPPLIER_QUOTATION', 'PURCHASE_ORDER', 'GOODS_RECEIPT', 'PURCHASE_INVOICE', 'PAYMENT_VOUCHER'] },
   { key: 'PURCHASE_IMPORT', label: 'Purchase (Import)', types: ['IMPORT_REQUEST', 'SUPPLIER_PROFORMA', 'PURCHASE_ORDER', 'IMPORT_SHIPMENT', 'GOODS_RECEIPT', 'LANDED_COST', 'PURCHASE_INVOICE', 'PAYMENT_VOUCHER'] },
 ];

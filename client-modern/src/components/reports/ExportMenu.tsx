@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, FileSpreadsheet, FileText, Printer, Table2 } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, FileType, Printer, Table2 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from '@/store/toast';
 import { blobError, type ExportFmt } from './reportTypes';
@@ -20,13 +20,14 @@ export function ExportMenu({ onExport, onPrint, disabled }: {
   const item = 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-brand-soft';
   return (
     <>
-      <div className="relative">
+      <div data-tour="demo-report-export" className="relative">
         <Button size="sm" icon={Download} loading={busy} disabled={disabled} onClick={() => setOpen((o) => !o)}>Export</Button>
         {open && (
           <div className="absolute left-0 top-7 z-30 w-36 rounded-lg border border-line bg-surface py-1 shadow" onMouseLeave={() => setOpen(false)}>
             <button type="button" className={item} onClick={() => run(() => onExport('pdf'))}><FileText size={13} /> PDF</button>
             <button type="button" className={item} onClick={() => run(() => onExport('xlsx'))}><FileSpreadsheet size={13} /> Excel</button>
             <button type="button" className={item} onClick={() => run(() => onExport('csv'))}><Table2 size={13} /> CSV</button>
+            <button type="button" className={item} onClick={() => run(() => onExport('docx'))}><FileType size={13} /> Word</button>
           </div>
         )}
       </div>

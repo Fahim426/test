@@ -24,7 +24,7 @@ const QuotationsList = makeSalesList<AnyRec>({
   formScreen: 'sales-quotation-form',
   permission: 'sales_quotation',
   newLabel: 'New Quotation',
-  statuses: ['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'CONVERTED', 'CANCELLED'],
+  statuses: ['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'PARTIALLY_CONVERTED', 'CONVERTED', 'CANCELLED'],
   columns: [
     { key: 'docNo', header: 'Quotation No', width: 130, filter: 'text' },
     { key: 'docDate', header: 'Date', type: 'date', width: 100 },
@@ -92,7 +92,7 @@ function QuotationForm({ params, tabId }: ScreenProps) {
             <DocAction
               icon={ShoppingCart}
               variant="primary"
-              hidden={doc.isNew || !['DRAFT', 'SENT', 'ACCEPTED'].includes(st) || !can('sales_order', 'create')}
+              hidden={doc.isNew || !['DRAFT', 'SENT', 'ACCEPTED', 'PARTIALLY_CONVERTED'].includes(st) || !can('sales_order', 'create')}
               loading={act.busy === 'create-order'}
               onClick={() => act.convert('create-order', 'sales-order-form', 'Sales order created')}
             >
@@ -100,7 +100,7 @@ function QuotationForm({ params, tabId }: ScreenProps) {
             </DocAction>
             <DocAction
               icon={FilePlus2}
-              hidden={doc.isNew || !['DRAFT', 'SENT', 'ACCEPTED', 'CONVERTED'].includes(st) || !can('proforma_invoice', 'create')}
+              hidden={doc.isNew || !['DRAFT', 'SENT', 'ACCEPTED', 'PARTIALLY_CONVERTED', 'CONVERTED'].includes(st) || !can('proforma_invoice', 'create')}
               loading={act.busy === 'create-proforma'}
               onClick={() => act.convert('create-proforma', 'proforma-invoice-form', 'Proforma invoice created')}
             >
@@ -167,7 +167,7 @@ const ProformaList = makeSalesList<AnyRec>({
   formScreen: 'proforma-invoice-form',
   permission: 'proforma_invoice',
   newLabel: 'New Proforma',
-  statuses: ['DRAFT', 'ISSUED', 'CONVERTED', 'INVOICED', 'CANCELLED'],
+  statuses: ['DRAFT', 'ISSUED', 'PARTIALLY_CONVERTED', 'CONVERTED', 'INVOICED', 'CANCELLED'],
   columns: [
     { key: 'docNo', header: 'Proforma No', width: 130, filter: 'text' },
     { key: 'docDate', header: 'Date', type: 'date', width: 100 },
@@ -228,7 +228,7 @@ function ProformaForm({ params, tabId }: ScreenProps) {
             <DocAction
               icon={ShoppingCart}
               variant="primary"
-              hidden={doc.isNew || !['DRAFT', 'ISSUED'].includes(st) || !can('sales_order', 'create')}
+              hidden={doc.isNew || !['DRAFT', 'ISSUED', 'PARTIALLY_CONVERTED'].includes(st) || !can('sales_order', 'create')}
               loading={act.busy === 'create-order'}
               onClick={() => act.convert('create-order', 'sales-order-form', 'Sales order created')}
             >

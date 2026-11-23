@@ -31,21 +31,27 @@ interface TBRow {
   credit: number;
   closingDebit: number;
   closingCredit: number;
+  /** customer / supplier head under Trade Debtors / Creditors (breakdown, not in totals) */
+  party?: boolean;
+  partyType?: 'CUSTOMER' | 'SUPPLIER';
+  partyId?: number | null;
+  parentId?: number | null;
 }
 function TrialBalanceScreen() {
   const open = useOpenScreen();
-  const f = useApplied({ asOf: today(), from: '', includeZero: false, level: '0' });
+  const f = useApplied({ asOf: today(), from: '', includeZero: false, level: '0', parties: false });
   const a = f.applied;
   const q = useQuery({
-    queryKey: ['fin-tb', a.asOf, a.from, a.includeZero],
-    queryFn: async () => (await api.get<{ rows: TBRow[]; totals: Record<string, number>; balanced: boolean }>('/ledger/trial-balance', { params: { asOf: a.asOf, from: a.from || undefined, includeZero: a.includeZero ? 1 : undefined } })).data,
+    queryKey: ['fin-tb', a.asOf, a.from, a.includeZero, a.parties],
+    queryFn: async () =>
+      (await api.get<{ rows: TBRow[]; totals: Record<string, number>; balanced: boolean }>('/ledger/trial-balance', { params: { asOf: a.asOf, from: a.from || undefined, includeZero: a.includeZero ? 1 : undefined, parties: a.parties ? 1 : undefined } })).data,
   });
   const d = q.data;
   const rows = useMemo(() => (d?.rows ?? []).filter((r) => a.level === '0' || r.level < Number(a.level)), [d, a.level]);
   const hasOpening = !!a.from;
   const columns: RCol<TBRow>[] = [
-    { key: 'code', header: 'Code', width: 150, value: (r) => `${'  '.repeat(r.level)}${r.code}`, render: (r) => <span style={{ paddingLeft: r.level * 14 }} className={cn(r.isGroup && 'font-semibold')}>{r.code}</span> },
-    { key: 'name', header: 'Account', render: (r) => <span className={cn(r.isGroup && 'font-semibold')}>{r.name}</span> },
+    { key: 'code', header: 'Code', width: 150, value: (r) => `${'  '.repeat(r.level)}${r.code}`, render: (r) => <span style={{ paddingLeft: r.level * 14 }} className={cn(r.isGroup && 'font-semibold', r.party && 'text-ink-muted')}>{r.code}</span> },
+    { key: 'name', header: 'Account', render: (r) => <span className={cn(r.isGroup && 'font-semibold', r.party && !r.partyId && 'italic text-warning')}>{r.name}</span> },
     ...(hasOpening ? [
       { key: 'openingDebit', header: 'Opening Dr', type: 'money', blankZero: true, width: 105 } as RCol<TBRow>,
       { key: 'openingCredit', header: 'Opening Cr', type: 'money', blankZero: true, width: 105 } as RCol<TBRow>,
@@ -72,11 +78,24 @@ function TrialBalanceScreen() {
             <Select value={f.draft.level} onChange={(e) => f.set('level', e.target.value)} options={[{ value: '0', label: 'All levels' }, { value: '1', label: 'Level 1' }, { value: '2', label: 'Up to level 2' }, { value: '3', label: 'Up to level 3' }]} />
           </FilterField>
           <Checkbox className="mb-1" label="Include zero" checked={f.draft.includeZero} onChange={(e) => f.set('includeZero', e.target.checked)} />
+          <Checkbox className="mb-1" label="Customer / supplier heads" checked={f.draft.parties} onChange={(e) => f.set('parties', e.target.checked)} />
         </>
       }
-      footer={d && <div className="flex items-center gap-3"><Balanced ok={d.balanced} text={d.balanced ? 'Trial balance is balanced' : 'Trial balance is OUT of balance'} /><span>Debit <Money v={d.totals.debit} /> / Credit <Money v={d.totals.credit} /> - double-click a posting account for its ledger</span></div>}
+      footer={d && <div className="flex items-center gap-3"><Balanced ok={d.balanced} text={d.balanced ? 'Trial balance is balanced' : 'Trial balance is OUT of balance'} /><span>Debit <Money v={d.totals.debit} /> / Credit <Money v={d.totals.credit} /> - double-click a posting account{a.parties ? ', customer or supplier' : ''} for its ledger</span></div>}
     >
-      {d && <ReportGrid columns={columns} rows={rows} totals={totals} onRowClick={(r) => !r.isGroup && open('general-ledger', { accountId: r.id, to: a.asOf, from: a.from || undefined }, `GL ${r.code}`)} rowClass={(r) => (r.isGroup ? 'bg-surface-2' : undefined)} />}
+      {d && (
+        <ReportGrid
+          columns={columns}
+          rows={rows}
+          totals={totals}
+          onRowClick={(r) => {
+            if (r.party) {
+              if (r.partyId && r.parentId) open('general-ledger', { accountId: r.parentId, partyType: r.partyType, partyId: r.partyId, to: a.asOf, from: a.from || undefined }, `Ledger · ${r.name}`);
+            } else if (!r.isGroup) open('general-ledger', { accountId: r.id, to: a.asOf, from: a.from || undefined }, `GL ${r.code}`);
+          }}
+          rowClass={(r) => (r.isGroup ? 'bg-surface-2' : r.party ? 'text-[12px]' : undefined)}
+        />
+      )}
     </ReportShell>
   );
 }

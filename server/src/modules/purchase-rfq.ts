@@ -11,6 +11,7 @@ import { linkDocs } from '../services/docLink';
 import { calcLine, calcTotals, num, r2, r4 } from '../lib/calc';
 import { enrich } from '../lib/enrich';
 import { assertStatus, baseCurrency, createPurchaseOrder, deleteLinks, finishDoc, listDocs, resolveRate } from '../services/purchase-common';
+import { syncParentsMiddleware, syncSourceStatus, takePending } from '../services/pending';
 import type { ModuleDef } from '../app';
 
 const T = { timeout: 30000 };
@@ -55,6 +56,7 @@ async function enquiryDetail(id: number) {
 }
 
 const eq = Router();
+eq.use('/:id', syncParentsMiddleware('PURCHASE_ENQUIRY'));
 eq.get('/', can(E, 'view'), ah(async (req, res) => {
   res.json(await listDocs(req, {
     model: 'purchaseEnquiry', search: ['docNo', 'remarks'], numeric: ['warehouseId', 'requisitionId'],
@@ -158,8 +160,8 @@ const eqTr = (path: string, perm: string, from: string[], to: string, action: st
     }, T);
     res.json(await enquiryDetail(id));
   }));
-eqTr('/close', 'edit', ['SENT', 'QUOTED'], 'CLOSED', 'CLOSE');
-eqTr('/cancel', 'cancel', ['DRAFT', 'SENT', 'QUOTED'], 'CANCELLED', 'CANCEL');
+eqTr('/close', 'edit', ['SENT', 'QUOTED', 'PARTIALLY_QUOTED'], 'CLOSED', 'CLOSE');
+eqTr('/cancel', 'cancel', ['DRAFT', 'SENT', 'QUOTED', 'PARTIALLY_QUOTED'], 'CANCELLED', 'CANCEL');
 
 // prefilled quotation for a supplier of this enquiry
 eq.post('/:id/create-quotation', can('supplier_quotation', 'create'), ah(async (req, res) => {
@@ -215,7 +217,7 @@ async function createQuotation(tx: Tx, raw: any, user: { id: number; username: s
   let srcItems = b.items;
   if (b.enquiryId) {
     const e = await tx.purchaseEnquiry.findUnique({ where: { id: b.enquiryId }, include: { items: true, suppliers: true } });
-    assertStatus(e, ['DRAFT', 'SENT', 'QUOTED'], 'add quotation to enquiry');
+    assertStatus(e, ['DRAFT', 'SENT', 'QUOTED', 'PARTIALLY_QUOTED'], 'add quotation to enquiry');
     if (!srcItems?.length) {
       const ps = await tx.product.findMany({ where: { id: { in: e!.items.map((i) => i.productId ?? 0) } } });
       const pm = new Map(ps.map((p) => [p.id, p]));
@@ -224,7 +226,7 @@ async function createQuotation(tx: Tx, raw: any, user: { id: number; username: s
     const row = e!.suppliers.find((s) => s.supplierId === b.supplierId);
     if (row) await tx.purchaseEnquirySupplier.update({ where: { id: row.id }, data: { responseStatus: 'RESPONDED', responseDate: new Date() } });
     else await tx.purchaseEnquirySupplier.create({ data: { enquiryId: e!.id, supplierId: b.supplierId, responseStatus: 'RESPONDED', responseDate: new Date() } });
-    if (e!.status !== 'QUOTED') await tx.purchaseEnquiry.update({ where: { id: e!.id }, data: { status: 'QUOTED' } });
+    if (!['QUOTED', 'PARTIALLY_QUOTED'].includes(e!.status)) await tx.purchaseEnquiry.update({ where: { id: e!.id }, data: { status: 'QUOTED' } });
   }
   if (!srcItems?.length) throw badRequest('Quotation needs at least one item');
   const base = await baseCurrency(tx);
@@ -241,6 +243,7 @@ async function createQuotation(tx: Tx, raw: any, user: { id: number; username: s
   if (b.enquiryId) {
     const e = await tx.purchaseEnquiry.findUnique({ where: { id: b.enquiryId } });
     await linkDocs(tx, { type: 'PURCHASE_ENQUIRY', id: e!.id, no: e!.docNo }, { type: 'SUPPLIER_QUOTATION', id: q.id, no: q.docNo });
+    await syncSourceStatus(tx, 'PURCHASE_ENQUIRY', e!.id);
   }
   await audit(tx, user, 'CREATE', 'SupplierQuotation', q.id, { docNo, enquiryId: b.enquiryId });
   return q;
@@ -260,6 +263,7 @@ async function quotationDetail(id: number) {
 }
 
 const sq = Router();
+sq.use('/:id', syncParentsMiddleware('SUPPLIER_QUOTATION'));
 sq.get('/', can(Q, 'view'), ah(async (req, res) => {
   res.json(await listDocs(req, { model: 'supplierQuotation', search: ['docNo', 'supplierRef', 'remarks'], supplierSearch: true, numeric: ['supplierId', 'enquiryId'], enrich: { supplierId: 'supplier' }, map: (r) => ({ ...r, baseTotal: r2(num(r.total) * num(r.exchangeRate)) }) }));
 }));
@@ -327,17 +331,19 @@ sq.post('/:id/create-order', can('purchase_order', 'create'), ah(async (req, res
   const po = await prisma.$transaction(async (tx) => {
     const q = await tx.supplierQuotation.findUnique({ where: { id }, include: { items: true } });
     if (!q) throw notFound('Quotation not found');
-    if (q.status === 'CONVERTED') throw badRequest('Quotation was already converted to a purchase order');
-    assertStatus(q, q.enquiryId ? ['SELECTED'] : ['RECEIVED', 'SELECTED'], 'create order (select the quotation in the comparative statement first)');
+    assertStatus(q, q.enquiryId ? ['SELECTED', 'PARTIALLY_CONVERTED', 'CONVERTED'] : ['RECEIVED', 'SELECTED', 'PARTIALLY_CONVERTED', 'CONVERTED'], 'create order (select the quotation in the comparative statement first)');
     if (q.items.some((i) => !i.productId)) throw badRequest('All quotation items must be linked to a product before creating a PO');
+    // first conversion copies everything; later ones only what is still pending
+    const items = await takePending(tx, 'SQ_PO', id, q.items, (i, qty) => ({ productId: i.productId!, description: i.description, qty, unit: i.unit, rate: num(i.rate), discount: r2(num(i.discount) * qty / (num(i.qty) || 1)), vatRate: num(i.vatRate) }), `quotation ${q.docNo}`);
     const enquiry = q.enquiryId ? await tx.purchaseEnquiry.findUnique({ where: { id: q.enquiryId } }) : null;
     const created = await createPurchaseOrder(tx, {
       docDate: o.docDate, supplierId: q.supplierId, quotationId: q.id, quotationRef: q.supplierRef ?? q.docNo, warehouseId: o.warehouseId ?? enquiry?.warehouseId ?? null,
       currencyCode: q.currencyCode, exchangeRate: num(q.exchangeRate), paymentTerms: q.paymentTerms, deliveryTerms: q.deliveryTerms,
       expectedDate: o.expectedDate ?? q.expectedDeliveryDate ?? (q.deliveryDays ? new Date(Date.now() + q.deliveryDays * 86400000) : null), remarks: o.remarks ?? q.remarks, roundOff: 0,
-      items: q.items.map((i) => ({ productId: i.productId!, description: i.description, qty: num(i.qty), unit: i.unit, rate: num(i.rate), discount: num(i.discount), vatRate: num(i.vatRate) })),
+      items,
     }, 'LOCAL', req.user!.id);
     await tx.supplierQuotation.update({ where: { id }, data: { status: 'CONVERTED' } });
+    await syncSourceStatus(tx, 'SUPPLIER_QUOTATION', id);
     if (enquiry && enquiry.status !== 'CLOSED') await tx.purchaseEnquiry.update({ where: { id: enquiry.id }, data: { status: 'CLOSED' } });
     await linkDocs(tx, { type: 'SUPPLIER_QUOTATION', id, no: q.docNo }, { type: 'PURCHASE_ORDER', id: created.id, no: created.docNo });
     await audit(tx, req.user, 'CREATE', 'PurchaseOrder', created.id, { from: q.docNo });

@@ -1,6 +1,6 @@
 import { api, saveBlob } from './api';
 
-export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
+export type ExportFormat = 'csv' | 'xlsx' | 'pdf' | 'docx';
 
 export interface ExportColumn {
   key: string;

@@ -1,5 +1,6 @@
 import { prisma, Tx } from '../lib/prisma';
-import { badRequest } from '../lib/errors';
+import { badRequest, forbidden } from '../lib/errors';
+import { buContext, buOfDoc, defaultBu, recordOpeningVisible, writeBu } from '../lib/bu';
 import { num, r2 } from '../lib/calc';
 import { nextNumber } from './numbering';
 
@@ -19,6 +20,8 @@ export interface JournalLineInput {
   description?: string;
   vatCode?: string;
   vatAmount?: number;
+  /** Business Unit of this line (manual journals; inter-BU transfers). Default: the journal's BU. Admin only. */
+  buId?: number;
 }
 
 export interface JournalInput {
@@ -29,16 +32,27 @@ export interface JournalInput {
   sourceNo?: string;
   narration?: string;
   userId?: number;
+  /** Business Unit of the journal; default: the BU of the source document, else the user's */
+  buId?: number;
   lines: JournalLineInput[];
 }
 
 export async function accountIdByKey(tx: Tx | typeof prisma, key: string): Promise<number> {
-  const a = await tx.account.findUnique({ where: { systemKey: key } });
+  const a = await tx.account.findFirst({ where: { systemKey: key } });
   if (!a) throw badRequest(`System account "${key}" is not configured in the Chart of Accounts`);
   return a.id;
 }
 
 /** Posts a balanced journal entry. Zero-value lines are dropped. Throws if debits != credits. */
+/** System account for balances between Business Units (created under the Trade Creditors group when missing). */
+export async function interBuAccount(tx: Tx): Promise<number> {
+  const a = await tx.account.findFirst({ where: { systemKey: 'INTER_BU' } });
+  if (a) return a.id;
+  const ap = await tx.account.findFirst({ where: { systemKey: 'AP' } });
+  const created = await tx.account.create({ data: { code: 'INTER-BU', name: 'INTER-BU CLEARING', type: 'LIABILITY', parentId: ap?.parentId ?? null, isGroup: false, systemKey: 'INTER_BU' } });
+  return created.id;
+}
+
 export async function postJournal(tx: Tx, j: JournalInput) {
   const lines: Array<Required<Pick<JournalLineInput, 'debit' | 'credit'>> & JournalLineInput & { accountId: number }> = [];
   for (const l of j.lines) {
@@ -57,17 +71,34 @@ export async function postJournal(tx: Tx, j: JournalInput) {
   if (Math.abs(totalDebit - totalCredit) > 0.005) {
     throw badRequest(`Journal not balanced: debit ${totalDebit} vs credit ${totalCredit}`);
   }
-  const entryNo = await nextNumber(tx, 'JOURNAL', { date: j.date });
+  // Business Unit: the source document's (an invoice posts in its own BU), else the request's, else the default
+  const ctx = buContext();
+  const bu = j.buId ?? (await buOfDoc(j.sourceType, j.sourceId)) ?? writeBu() ?? ctx?.userBu ?? (await defaultBu());
+  for (const l of lines) {
+    if (l.buId && l.buId !== bu && ctx && !ctx.isAdmin) throw forbidden('Only an administrator can post journal lines to another Business Unit');
+  }
+  // lines in several BUs: each BU must balance on its own, so the difference goes to Inter-BU Clearing in that BU
+  const perBu = new Map<number, number>();
+  for (const l of lines) perBu.set(l.buId ?? bu ?? 0, r2((perBu.get(l.buId ?? bu ?? 0) ?? 0) + l.debit - l.credit));
+  if (perBu.size > 1) {
+    const clearing = await interBuAccount(tx);
+    for (const [b, diff] of perBu) {
+      if (Math.abs(diff) < 0.005) continue;
+      lines.push({ accountId: clearing, debit: diff < 0 ? -diff : 0, credit: diff > 0 ? diff : 0, description: 'Inter-BU clearing', buId: b || undefined });
+    }
+  }
+  const entryNo = await nextNumber(tx, 'JOURNAL', { date: j.date, buId: bu });
   return tx.journalEntry.create({
     data: {
       entryNo,
+      buId: bu,
       entryDate: j.date,
       entryType: j.entryType ?? 'AUTO',
       sourceType: j.sourceType,
       sourceId: j.sourceId,
       sourceNo: j.sourceNo,
       narration: j.narration,
-      totalDebit,
+      totalDebit: r2(lines.reduce((s, l) => s + l.debit, 0)), // incl. any Inter-BU clearing lines
       createdBy: j.userId,
       lines: {
         create: lines.map((l) => ({
@@ -79,6 +110,7 @@ export async function postJournal(tx: Tx, j: JournalInput) {
           description: l.description,
           vatCode: l.vatCode,
           vatAmount: l.vatAmount ?? 0,
+          buId: l.buId ?? bu,
         })),
       },
     },
@@ -99,7 +131,9 @@ export async function reverseJournal(tx: Tx, journalId: number, userId?: number,
     sourceNo: orig.sourceNo ?? undefined,
     narration: `Reversal of ${orig.entryNo}`,
     userId,
+    buId: orig.buId ?? undefined, // the reversal stays in the original's Business Unit(s)
     lines: orig.lines.map((l) => ({
+      buId: l.buId ?? undefined,
       accountId: l.accountId,
       debit: num(l.credit),
       credit: num(l.debit),
@@ -122,7 +156,9 @@ export async function customerBalance(customerId: number, tx: Tx | typeof prisma
     where: { accountId: ar, partyType: 'CUSTOMER', partyId: customerId },
     _sum: { debit: true, credit: true },
   });
-  return r2(num(c?.openingBalance) + num(agg._sum.debit) - num(agg._sum.credit));
+  // the opening balance on the record belongs to the default Business Unit
+  const opening = (await recordOpeningVisible()) ? num(c?.openingBalance) : 0;
+  return r2(opening + num(agg._sum.debit) - num(agg._sum.credit));
 }
 
 /** Supplier balance (amount we owe, positive) = opening + Σ(credit - debit) on AP lines. */
@@ -133,5 +169,6 @@ export async function supplierBalance(supplierId: number, tx: Tx | typeof prisma
     where: { accountId: ap, partyType: 'SUPPLIER', partyId: supplierId },
     _sum: { debit: true, credit: true },
   });
-  return r2(num(s?.openingBalance) + num(agg._sum.credit) - num(agg._sum.debit));
+  const opening = (await recordOpeningVisible()) ? num(s?.openingBalance) : 0;
+  return r2(opening + num(agg._sum.credit) - num(agg._sum.debit));
 }

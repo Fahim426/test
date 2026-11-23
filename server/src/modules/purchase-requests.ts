@@ -9,6 +9,7 @@ import { audit } from '../services/audit';
 import { nextNumber } from '../services/numbering';
 import { linkDocs } from '../services/docLink';
 import { assertStatus, deleteLinks, finishDoc, listDocs } from '../services/purchase-common';
+import { syncParentsMiddleware, syncSourceStatus, takePending } from '../services/pending';
 import type { ModuleDef } from '../app';
 
 const T = { timeout: 30000 };
@@ -127,15 +128,15 @@ mr.post('/:id/create-requisition', can('purchase_requisition', 'create'), ah(asy
   const out = await prisma.$transaction(async (tx) => {
     const m = await tx.materialRequest.findUnique({ where: { id }, include: { items: true } });
     assertStatus(m, ['APPROVED'], 'create a requisition (material request must be APPROVED)');
-    const dup = await tx.purchaseRequisition.findFirst({ where: { materialRequestId: id, status: { notIn: ['CANCELLED', 'REJECTED'] } } });
-    if (dup) throw badRequest(`Requisition ${dup.docNo} already exists for this material request`);
+    // first time: all lines; afterwards only what is still pending
+    const lines = await takePending(tx, 'MR_PR', id, m!.items, (i, qty) => ({ productId: i.productId, description: i.description, qty, unit: i.unit, requiredDate: i.requiredDate ?? m!.requiredDate, remarks: i.remarks }), `material request ${m!.docNo}`);
     const docDate = new Date();
     const docNo = await nextNumber(tx, 'PURCHASE_REQUISITION', { date: docDate });
     const pr = await tx.purchaseRequisition.create({
       data: {
         docNo, docDate, materialRequestId: id, department: m!.department, warehouseId: m!.warehouseId, requestedBy: m!.requestedBy, priority: m!.priority, status: 'DRAFT', createdBy: req.user!.id,
         remarks: m!.remarks,
-        items: { create: m!.items.map((i) => ({ productId: i.productId, description: i.description, qty: i.qty, unit: i.unit, requiredDate: i.requiredDate ?? m!.requiredDate, remarks: i.remarks })) },
+        items: { create: lines },
       },
     });
     await linkDocs(tx, { type: 'MATERIAL_REQUEST', id, no: m!.docNo }, { type: 'PURCHASE_REQUISITION', id: pr.id, no: pr.docNo });
@@ -158,6 +159,7 @@ const prSchema = z.object({
 });
 const PR = 'purchase_requisition';
 const pr = Router();
+pr.use('/:id', syncParentsMiddleware('PURCHASE_REQUISITION'));
 const loadPR = async (id: number) => {
   const d = await prisma.purchaseRequisition.findUnique({ where: { id }, include: { items: true } });
   if (!d) throw notFound('Purchase requisition not found');
@@ -227,7 +229,7 @@ const prTransition = (path: string, perm: string, from: string[], to: string, ac
 prTransition('/submit', 'edit', ['DRAFT'], 'SUBMITTED', 'SUBMIT');
 prTransition('/approve', 'approve', ['SUBMITTED'], 'APPROVED', 'APPROVE');
 prTransition('/reject', 'reject', ['SUBMITTED'], 'REJECTED', 'REJECT');
-prTransition('/close', 'edit', ['APPROVED', 'CONVERTED'], 'CLOSED', 'CLOSE');
+prTransition('/close', 'edit', ['APPROVED', 'PARTIALLY_CONVERTED', 'CONVERTED'], 'CLOSED', 'CLOSE');
 prTransition('/cancel', 'cancel', ['DRAFT', 'SUBMITTED', 'APPROVED'], 'CANCELLED', 'CANCEL');
 
 // Convert to purchase enquiry (RFQ) with optional supplier list
@@ -236,9 +238,8 @@ pr.post('/:id/create-enquiry', can('purchase_enquiry', 'create'), ah(async (req,
   const b = parse(z.object({ supplierIds: z.array(z.coerce.number().int()).default([]), requiredDate: z.coerce.date().nullish() }), req.body ?? {});
   const out = await prisma.$transaction(async (tx) => {
     const p = await tx.purchaseRequisition.findUnique({ where: { id }, include: { items: true } });
-    assertStatus(p, ['APPROVED'], 'create an enquiry (requisition must be APPROVED)');
-    const dup = await tx.purchaseEnquiry.findFirst({ where: { requisitionId: id, status: { not: 'CANCELLED' } } });
-    if (dup) throw badRequest(`Enquiry ${dup.docNo} already exists for this requisition`);
+    assertStatus(p, ['APPROVED', 'PARTIALLY_CONVERTED', 'CONVERTED'], 'create an enquiry (requisition must be APPROVED)');
+    const lines = await takePending(tx, 'PR_RFQ', id, p!.items, (i, qty) => ({ productId: i.productId, description: i.description, qty, unit: i.unit }), `requisition ${p!.docNo}`);
     if (b.supplierIds && b.supplierIds.length) {
       const n = await tx.supplier.count({ where: { id: { in: b.supplierIds } } });
       if (n !== new Set(b.supplierIds).size) throw badRequest('Unknown supplier in supplierIds');
@@ -248,11 +249,12 @@ pr.post('/:id/create-enquiry', can('purchase_enquiry', 'create'), ah(async (req,
     const e = await tx.purchaseEnquiry.create({
       data: {
         docNo, docDate, requiredDate: b.requiredDate ?? p!.items.find((i) => i.requiredDate)?.requiredDate ?? null, requisitionId: id, warehouseId: p!.warehouseId, remarks: p!.remarks, status: 'DRAFT', createdBy: req.user!.id,
-        items: { create: p!.items.map((i) => ({ productId: i.productId, description: i.description, qty: i.qty, unit: i.unit })) },
+        items: { create: lines },
         suppliers: { create: [...new Set(b.supplierIds ?? [])].map((supplierId) => ({ supplierId })) },
       },
     });
     await tx.purchaseRequisition.update({ where: { id }, data: { status: 'CONVERTED' } });
+    await syncSourceStatus(tx, 'PURCHASE_REQUISITION', id);
     await linkDocs(tx, { type: 'PURCHASE_REQUISITION', id, no: p!.docNo }, { type: 'PURCHASE_ENQUIRY', id: e.id, no: e.docNo });
     await audit(tx, req.user, 'CREATE', 'PurchaseEnquiry', e.id, { from: p!.docNo });
     return e;

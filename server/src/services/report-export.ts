@@ -3,6 +3,7 @@ import { companyLogoDataUri, drawCompanyLogo } from './report-brand';
 import { readCompanyLogo } from './product-config';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import { AlignmentType, Document, Packer, PageOrientation, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } from 'docx';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { num } from '../lib/calc';
@@ -24,7 +25,7 @@ export const exportBodySchema = z.object({
   rows: z.array(z.record(z.any())).max(100000),
   totals: z.record(z.any()).optional(),
   params: z.record(z.any()).optional(),
-  format: z.enum(['pdf', 'xlsx', 'csv']).default('xlsx'),
+  format: z.enum(['pdf', 'xlsx', 'csv', 'docx']).default('xlsx'),
   filename: z.string().max(120).optional(),
 });
 
@@ -353,11 +354,63 @@ td{padding:4px 6px;border-bottom:1px solid #E5E7EB}tbody tr:nth-child(even){back
 <table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody>${tot}</table><div class="m" style="margin-top:10px">Generated ${new Date().toISOString().replace('T', ' ').slice(0, 16)}</div></body></html>`;
 }
 
-export const MIME = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', csv: 'text/csv; charset=utf-8' } as const;
+/** Word (.docx): company header, title, filters, table (header row repeats on every page), totals. Landscape for wide tables. */
+export async function toDocx(inp: ExportInput): Promise<Buffer> {
+  const co = await companyInfo();
+  const cols = inp.columns.map((c) => {
+    const sample = inp.rows.find((r) => getPath(r, c.key) != null);
+    const t = typeOf(c, sample ? getPath(sample, c.key) : undefined);
+    return { c, t, align: alignOf(c, t) };
+  });
+  const landscape = cols.length > 6;
+  const AL = { left: AlignmentType.LEFT, right: AlignmentType.RIGHT, center: AlignmentType.CENTER } as const;
+  const SZ = cols.length > 10 ? 14 : 16; // half-points: 7 / 8 pt
+  const cell = (text: string, align: 'left' | 'right' | 'center', o: { head?: boolean; bold?: boolean; shade?: string } = {}) =>
+    new TableCell({
+      children: [new Paragraph({ alignment: AL[align], children: [new TextRun({ text, size: SZ, bold: o.head || o.bold, color: o.head ? 'FFFFFF' : '111827', font: 'Arial' })] })],
+      shading: o.shade ? { type: ShadingType.CLEAR, color: 'auto', fill: o.shade } : undefined,
+      margins: { top: 30, bottom: 30, left: 60, right: 60 },
+    });
+  const header = new TableRow({ tableHeader: true, children: cols.map((x) => cell(labelOf(x.c), x.align, { head: true, shade: '1E3A5F' })) });
+  const body = inp.rows.map((r, i) => new TableRow({ children: cols.map((x) => cell(fmtCell(getPath(r, x.c.key), x.t), x.align, { shade: i % 2 ? 'F8FAFC' : undefined })) }));
+  const tot =
+    inp.totals && Object.keys(inp.totals).length
+      ? [new TableRow({ children: cols.map((x, i) => cell(getPath(inp.totals, x.c.key) != null ? fmtCell(getPath(inp.totals, x.c.key), x.t) : i === 0 ? 'Total' : '', x.align, { bold: true, shade: 'E2E8F0' })) })]
+      : [];
+  const p = (text: string, o: { size?: number; bold?: boolean; color?: string; after?: number } = {}) =>
+    new Paragraph({ spacing: { after: o.after ?? 40 }, children: [new TextRun({ text, size: o.size ?? 18, bold: o.bold, color: o.color ?? '111827', font: 'Arial' })] });
+  const doc = new Document({
+    creator: co.name,
+    title: inp.title,
+    sections: [
+      {
+        properties: { page: { size: { orientation: landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT }, margin: { top: 567, bottom: 567, left: 567, right: 567 } } },
+        children: [
+          p(co.name, { size: 30, bold: true, color: '1E3A5F' }),
+          ...([co.trn ? `TRN: ${co.trn}` : '', co.address].filter(Boolean).length ? [p([co.trn ? `TRN: ${co.trn}` : '', co.address].filter(Boolean).join(' | '), { size: 16, color: '6B7280' })] : []),
+          p(inp.title, { size: 24, bold: true, after: 20 }),
+          ...(inp.subtitle ? [p(inp.subtitle, { size: 16, color: '6B7280' })] : []),
+          ...(paramLine(inp.params) ? [p(paramLine(inp.params), { size: 16, color: '6B7280' })] : []),
+          new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [header, ...body, ...tot] }),
+          p(`Generated ${new Date().toISOString().replace('T', ' ').slice(0, 16)}  ·  ${inp.rows.length} rows`, { size: 14, color: '6B7280' }),
+        ],
+      },
+    ],
+  });
+  return Packer.toBuffer(doc);
+}
 
-export async function render(inp: ExportInput, format: 'pdf' | 'xlsx' | 'csv'): Promise<{ buffer: Buffer; mime: string; ext: string }> {
+export const MIME = {
+  pdf: 'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv: 'text/csv; charset=utf-8',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+} as const;
+
+export async function render(inp: ExportInput, format: 'pdf' | 'xlsx' | 'csv' | 'docx'): Promise<{ buffer: Buffer; mime: string; ext: string }> {
   if (format === 'csv') return { buffer: toCsv(inp), mime: MIME.csv, ext: 'csv' };
   if (format === 'xlsx') return { buffer: await toXlsx(inp), mime: MIME.xlsx, ext: 'xlsx' };
+  if (format === 'docx') return { buffer: await toDocx(inp), mime: MIME.docx, ext: 'docx' };
   return { buffer: await toPdf(inp), mime: MIME.pdf, ext: 'pdf' };
 }
 void num;

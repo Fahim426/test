@@ -359,14 +359,13 @@ function allowed(id: string) {
     )
   );
 }
-export function startSalesFlowTour() {
-  const available = stages.filter(([id]) => allowed(id));
+function runFlowTour(flowStages: string[][], label: string, introduction: string) {
+  const available = flowStages.filter(([id]) => allowed(id));
   const steps: DriveStep[] = [
     {
       popover: {
-        title: 'Sales flow walkthrough',
-        description:
-          'Enquiry → Quotation → (Proforma) → Order → Picking → Packing → Delivery → Invoice → Receipt. This walkthrough only opens list screens. It never creates or changes data. Stages outside your permissions are skipped.',
+        title: label + ' walkthrough',
+        description: introduction,
       },
     },
     ...available.map(([id, title, description]) => ({
@@ -404,11 +403,29 @@ export function startSalesFlowTour() {
     }
     if (current === ticket && tour.isActive()) tour.moveTo(index);
   };
-  return makeTour(steps, 'Sales flow', {
+  return makeTour(steps, label, {
     onNextClick: (_el, _s, { driver: t }) => void go(t, (t.getActiveIndex() ?? 0) + 1),
     onPrevClick: (_el, _s, { driver: t }) => void go(t, (t.getActiveIndex() ?? 0) - 1),
     onDestroyed: () => {
       ticket++;
     },
   });
+}
+
+const purchaseStages = [
+ ['material-requests', 'Material request', 'Record the equipment, spare parts or consumables required. Submit the request for approval, then create a requisition.'],
+ ['purchase-requisitions', 'Purchase requisition', 'Confirm the purchasing need. New Requisition lists requests with quantities still pending. Approve, then create the supplier enquiry.'],
+ ['purchase-enquiries', 'Supplier enquiry', 'Invite suppliers to quote for the requested quantities and record their responses.'],
+ ['supplier-quotations', 'Supplier quotations', 'Compare prices, delivery dates and terms. Select a quotation and create a purchase order.'],
+ ['comparative-statements', 'Compare supplier offers', 'Review competing supplier quotations and choose the supplier for the purchase.'],
+ ['purchase-orders', 'Purchase order', 'Confirm the supplier and quantities. Create the goods receipt when the equipment arrives. New PO lists quotations with quantities still available to order.'],
+ ['goods-receipts', 'Goods receipt', 'Record the actual quantities received and post the receipt to update warehouse stock. Create the supplier invoice from the receipt.'],
+ ['purchase-invoices', 'Supplier invoice', 'Check the supplier bill and post the payable and input VAT. Review any quantities still waiting to be invoiced.'],
+ ['bank-payments', 'Supplier payment', 'Record the payment and allocate it against the supplier bill. The allocated amount reduces the outstanding balance.'],
+];
+export function startSalesFlowTour() {
+ return runFlowTour(stages, 'Sales flow', 'Follow the enquiry, quotation, order, delivery, invoice and receipt screens. This walkthrough opens screens only. Each stage is filtered by your access permissions.');
+}
+export function startPurchaseFlowTour() {
+ return runFlowTour(purchaseStages, 'Purchase flow', 'Follow one equipment purchase through approval, goods receipt, supplier invoice and payment. This walkthrough opens screens only. Each stage is filtered by your access permissions.');
 }

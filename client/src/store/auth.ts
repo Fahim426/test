@@ -9,6 +9,8 @@ export interface AuthUser {
   email?: string | null;
   role: string;
   branchId?: number | null;
+  businessUnitId?: number | null;
+  businessUnit?: { id: number; code: string; name: string } | null;
   permissions: string[]; // "module:action" ; ['*'] = everything
 }
 

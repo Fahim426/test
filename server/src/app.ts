@@ -6,7 +6,9 @@ import fs from 'fs';
 import path from 'path';
 import { env } from './lib/env';
 import { authenticate, errorHandler } from './middleware/auth';
+import { buMiddleware } from './lib/bu';
 import authRouter from './routes/auth';
+import { pendingListBadges } from './services/pending';
 
 export interface ModuleDef {
   path: string;
@@ -42,8 +44,18 @@ export function createApp() {
   app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
   app.use('/api/auth', authRouter);
 
+  // Product pictures are public, non-sensitive media so <img> tags can load them without a bearer token.
+  // Only files written by POST /api/products/:id/image live here (random names, image types only).
+  const productMedia = path.resolve(env.uploadDir, 'products');
+  fs.mkdirSync(productMedia, { recursive: true });
+  app.use('/api/media/products', express.static(productMedia, { maxAge: '7d', index: false, dotfiles: 'deny' }), (_req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+
   const api = Router();
   api.use(authenticate);
+  api.use(buMiddleware); // Business Unit context for the Prisma scope (lib/bu.ts)
+  api.use(pendingListBadges); // adds pendingCount to document list rows
   for (const m of loadModules()) {
     api.use(m.path, m.router);
     console.log(`  mounted /api${m.path}`);

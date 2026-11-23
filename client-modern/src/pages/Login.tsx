@@ -173,6 +173,9 @@ export default function Login() {
                 )}
               </button>
             </form>
+            <p className="mt-10 text-center text-xs text-ink-faint">
+              Powered by <span className="font-semibold text-ink-muted">SmartFlix Technologies</span>
+            </p>
           </div>
         </div>
       </div>

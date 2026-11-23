@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import axios from 'axios';
+import { useBuStore } from './bu';
 
 export interface AuthUser {
   id: number;
@@ -9,6 +10,9 @@ export interface AuthUser {
   email?: string | null;
   role: string;
   branchId?: number | null;
+  /** the one Business Unit of a non-admin user */
+  businessUnitId?: number | null;
+  businessUnit?: { id: number; code: string; name: string } | null;
   permissions: string[]; // "module:action" ; ['*'] = everything
 }
 
@@ -31,11 +35,13 @@ export const useAuth = create<AuthState>()(
       login: async (username, password) => {
         const res = await axios.post<{ accessToken: string; refreshToken: string; user: AuthUser }>('/api/auth/login', { username, password });
         set({ accessToken: res.data.accessToken, refreshToken: res.data.refreshToken, user: res.data.user });
+        useBuStore.getState().setSelectedBuId(null); // Admin starts on All BUs (consolidated) after every login
       },
       logout: (callServer = true) => {
         const rt = get().refreshToken;
         if (callServer && rt) axios.post('/api/auth/logout', { refreshToken: rt }).catch(() => undefined);
         set({ accessToken: null, refreshToken: null, user: null });
+        useBuStore.getState().setSelectedBuId(null);
       },
     }),
     { name: 'ss-auth', partialize: (s) => ({ accessToken: s.accessToken, refreshToken: s.refreshToken, user: s.user }) },

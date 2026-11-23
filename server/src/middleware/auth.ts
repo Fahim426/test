@@ -11,6 +11,8 @@ export interface AuthUser {
   role: string;
   roleId: number;
   branchId?: number | null;
+  /** Business Unit of a non-admin user (lib/bu.ts) */
+  businessUnitId?: number | null;
   permissions: Set<string>; // "module:action"
 }
 
@@ -51,6 +53,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       role: user.role.name,
       roleId: user.roleId,
       branchId: user.branchId,
+      businessUnitId: user.businessUnitId,
       permissions: await loadPermissions(user.roleId),
     };
     next();

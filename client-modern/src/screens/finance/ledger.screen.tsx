@@ -48,8 +48,9 @@ function GeneralLedgerScreen({ params }: ScreenProps) {
     accountId: params.accountId ? Number(params.accountId) : (null as number | null),
     from: (params.from as string) || yearStart(),
     to: (params.to as string) || today(),
-    partyType: '' as '' | 'CUSTOMER' | 'SUPPLIER',
-    partyId: null as number | null,
+    // opened from a customer / supplier (Linked Ledger) or a party head in the Chart of Accounts / Trial Balance
+    partyType: (params.partyType === 'CUSTOMER' || params.partyType === 'SUPPLIER' ? params.partyType : '') as '' | 'CUSTOMER' | 'SUPPLIER',
+    partyId: params.partyId ? Number(params.partyId) : (null as number | null),
   });
   const parties = useParties(f.draft.partyType || undefined);
   const a = f.applied;

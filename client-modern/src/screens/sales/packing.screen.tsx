@@ -222,6 +222,7 @@ function PackingForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType={TYPE} docId={doc.id} />
         {dirty && editable && <InfoBanner tone="amber">Unsaved changes. Save before marking packed or creating the delivery.</InfoBanner>}
         <HeaderSection title="Packing Information" columns={4}>
           <Field label="Packing Number"><Input value={doc.data?.docNo ?? ''} readOnly /></Field>
@@ -308,7 +309,6 @@ function PackingForm({ params, tabId }: ScreenProps) {
         </DocSection>
 
         <AttachmentsSection docType={TYPE} docId={doc.id} />
-        <DocumentFlow docType={TYPE} docId={doc.id} />
         <AuditSection doc={doc.data} />
       </DocumentLayout>
     </>

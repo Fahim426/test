@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma, Tx } from '../lib/prisma';
 import { badRequest, notFound } from '../lib/errors';
 import { calcLine, calcTotals, num, r2, r3, r4 } from '../lib/calc';
+import { dueDateFor } from '../lib/terms';
 import { listQuery, paged } from '../lib/http';
 import { enrich } from '../lib/enrich';
 import { getLinks } from './docLink';
@@ -41,12 +42,8 @@ export const addDays = (d: Date, days: number) => new Date(d.getTime() + days * 
 
 export async function supplierDueDate(tx: Tx | typeof prisma, supplierId: number, docDate: Date) {
   const s = await tx.supplier.findUnique({ where: { id: supplierId } });
-  let days = 0;
-  if (s?.paymentTermId) {
-    const t = await tx.paymentTerm.findUnique({ where: { id: s.paymentTermId } });
-    days = t?.days ?? 0;
-  }
-  return addDays(docDate, days);
+  const t = s?.paymentTermId ? await tx.paymentTerm.findUnique({ where: { id: s.paymentTermId } }) : null;
+  return dueDateFor(docDate, t);
 }
 
 export function assertStatus(doc: { status: string } | null, allowed: string[], what: string) {

@@ -238,6 +238,7 @@ function ReturnForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType={TYPE} docId={doc.id} />
         <Stepper status={status} />
         {status === 'DRAFT' && <InfoBanner tone="blue">Step 1: set the quantity the customer is returning and save. Step 2: when the goods arrive press <b>Receive Goods</b> (adjust the received quantity if different).</InfoBanner>}
         {inspecting && <InfoBanner tone="blue">Step 3: inspect the received goods. For every line split the received quantity into <b>resalable</b> (back to stock) and <b>damaged</b> (written off), then save the inspection.</InfoBanner>}
@@ -339,7 +340,6 @@ function ReturnForm({ params, tabId }: ScreenProps) {
           <Field label="Remarks"><Textarea rows={2} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} /></Field>
         </DocSection>
         <AttachmentsSection docType={TYPE} docId={doc.id} />
-        <DocumentFlow docType={TYPE} docId={doc.id} />
         <AuditSection doc={doc.data} />
       </DocumentLayout>
     </>

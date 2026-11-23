@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '@/store/workspace';
 import { StatusBadge } from '@/components/ui';
 import { DocSection } from './DocumentLayout';
 import { cn } from '@/lib/cn';
+import { PendingNote } from './PendingNote';
 
 export interface FlowDoc {
   type?: string;
@@ -82,6 +83,8 @@ export function DocumentFlow({ docType, docId }: { docType: string; docId?: numb
     ) : null;
 
   return (
+    <>
+    <PendingNote docType={docType} docId={docId} />
     <DocSection title={`Document Flow${chain ? ` - ${chain.label}` : ''}`} bodyClassName="p-3">
       {q.isLoading && <div className="text-[12px] text-slate-500">Loading flow...</div>}
       {q.isError && <div className="text-[12px] text-slate-500">Document flow is not available.</div>}
@@ -118,5 +121,6 @@ export function DocumentFlow({ docType, docId }: { docType: string; docId?: numb
         <Group title="Related Documents" docs={d?.related} />
       </div>
     </DocSection>
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { Home, Landmark, Package, BarChart3, Network, ShieldCheck, Wrench, Users, type LucideIcon } from 'lucide-react';
+import { Home, Landmark, Package, BarChart3, Network, ShieldCheck, Users, Wrench, FileCheck, type LucideIcon } from 'lucide-react';
 import { ribbonConfig } from '@/ribbon/ribbonConfig';
 
 export const MODULE_ICONS: Record<string, LucideIcon> = {
@@ -7,9 +7,10 @@ export const MODULE_ICONS: Record<string, LucideIcon> = {
   inventory: Package,
   reports: BarChart3,
   dimensions: Network,
-  admin: ShieldCheck,
-  amc: Wrench,
   hr: Users,
+  amc: Wrench,
+  einvoice: FileCheck,
+  admin: ShieldCheck,
 };
 
 export interface NavEntry {
@@ -50,6 +51,7 @@ export const QUICK_GROUPS: { name: string; items: QuickAction[] }[] = [
     items: [
       g('New Sales Enquiry', 'sales-enquiry-form', 'sales_enquiry'),
       g('New Quotation', 'sales-quotation-form', 'sales_quotation'),
+      g('New Proforma Invoice', 'proforma-invoice-form', 'proforma_invoice'),
       g('New Sales Order', 'sales-order-form', 'sales_order'),
       g('New Sales Invoice', 'sales-invoice-form', 'sales_invoice'),
     ],

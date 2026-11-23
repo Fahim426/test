@@ -115,7 +115,7 @@ export async function resolveTerm(tx: Tx | typeof prisma, text: string | null | 
   let t = null;
   if (text) t = await tx.paymentTerm.findFirst({ where: { OR: [{ code: text }, { name: text }] } });
   if (!t && !text && customerPaymentTermId) t = await tx.paymentTerm.findUnique({ where: { id: customerPaymentTermId } });
-  return { name: text || t?.name || null, days: t ? t.days : 0 };
+  return { name: text || t?.name || null, days: t ? t.days : 0, basis: t?.basis ?? 'INVOICE_DATE' };
 }
 
 export const addDays = (d: Date, days: number) => {

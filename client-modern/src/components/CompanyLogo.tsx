@@ -1,9 +1,12 @@
+import { useCompany } from '@/hooks/useCompany';
 import { useProductConfig } from '@/hooks/useProductConfig';
 export function CompanyLogo({ className = 'h-9 w-24' }: { className?: string }) {
   const { config } = useProductConfig();
-  return config.logoDataUri ? (
+  const company = useCompany();
+  const logo = (company.data?.logo as string | undefined) || config.logoDataUri;
+  return logo ? (
     <img
-      src={config.logoDataUri}
+      src={logo}
       alt={config.company?.name || config.appName}
       className={className + ' shrink-0 rounded bg-white object-contain'}
     />

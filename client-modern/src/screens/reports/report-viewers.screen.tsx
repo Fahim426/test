@@ -13,6 +13,7 @@ const REPORTS: { id: string; title: string }[] = [
   { id: 'sales-by-product', title: 'Sales by Product' },
   { id: 'sales-by-brand', title: 'Sales by Brand' },
   { id: 'salesman-sales', title: 'Salesman Sales' },
+  { id: 'salesman-incentive', title: 'Salesman Incentive' },
   { id: 'gross-profit', title: 'Gross Profit' },
   { id: 'invoice-register', title: 'Invoice Register' },
   { id: 'sales-return-report', title: 'Sales Return Report' },

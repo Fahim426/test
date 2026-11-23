@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpen, ChevronDown, ChevronRight, Edit3, Lock, Plus, Power, Trash2, FolderTree } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronRight, Edit3, Lock, Plus, Power, Trash2, FolderTree, Truck, Users } from 'lucide-react';
 import type { ScreenDef } from '@/screens/types';
 import { api, apiError } from '@/lib/api';
 import { fmt, today } from '@/lib/format';
@@ -26,6 +26,20 @@ interface Node {
   balance?: number;
   signedBalance?: number;
   children: Node[];
+}
+
+type Side = 'CUSTOMER' | 'SUPPLIER';
+interface PartyHead {
+  partyType: Side;
+  partyId: number | null;
+  code: string;
+  name: string;
+  isActive: boolean;
+  closing: number;
+}
+interface PartyHeads {
+  rows: PartyHead[];
+  unallocated: PartyHead | null;
 }
 
 const TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'COGS', 'EXPENSE'];
@@ -92,6 +106,28 @@ function ChartOfAccountsScreen() {
     setOpen(s);
   }
   const rows = useMemo(() => flatten(roots, open, q, showInactive), [roots, open, q, showInactive]);
+
+  // customer / supplier heads under Trade Debtors (AR) / Trade Creditors (AP), loaded when expanded (search filters them)
+  const [partyOpen, setPartyOpen] = useState<Set<Side>>(new Set());
+  const custHeads = useQuery({
+    queryKey: ['fin-party-heads', 'CUSTOMER', asOf],
+    enabled: partyOpen.has('CUSTOMER'),
+    queryFn: async () => (await api.get<PartyHeads>('/ledger/party-heads', { params: { side: 'CUSTOMER', to: asOf } })).data,
+  });
+  const suppHeads = useQuery({
+    queryKey: ['fin-party-heads', 'SUPPLIER', asOf],
+    enabled: partyOpen.has('SUPPLIER'),
+    queryFn: async () => (await api.get<PartyHeads>('/ledger/party-heads', { params: { side: 'SUPPLIER', to: asOf } })).data,
+  });
+  const sideOf = (n: Node): Side | null => (n.systemKey === 'AR' ? 'CUSTOMER' : n.systemKey === 'AP' ? 'SUPPLIER' : null);
+  const headsFor = (side: Side) => {
+    const d = side === 'CUSTOMER' ? custHeads.data : suppHeads.data;
+    const all = [...(d?.rows ?? []), ...(d?.unallocated ? [d.unallocated] : [])];
+    if (!q) return all;
+    const s = q.toLowerCase();
+    return all.filter((h) => h.code.toLowerCase().includes(s) || h.name.toLowerCase().includes(s));
+  };
+  const toggleParty = (side: Side) => setPartyOpen((x) => { const y = new Set(x); if (y.has(side)) y.delete(side); else y.add(side); return y; });
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['fin-coa-tree'] });
@@ -166,13 +202,22 @@ function ChartOfAccountsScreen() {
             <tbody>
               {rows.map((n) => {
                 const isOpen = open.has(n.id) || !!q;
+                const side = sideOf(n);
+                const partiesOpen = !!side && partyOpen.has(side);
+                const heads = side && partiesOpen ? headsFor(side) : [];
+                const headsLoading = side === 'CUSTOMER' ? custHeads.isLoading : side === 'SUPPLIER' ? suppHeads.isLoading : false;
                 return (
-                  <tr key={n.id} className={cn('h-8 hover:bg-brand-soft', n.level === 0 && 'bg-surface-2 font-semibold', !n.isActive && 'text-ink-faint')}>
+                  <Fragment key={n.id}>
+                  <tr className={cn('h-8 hover:bg-brand-soft', n.level === 0 && 'bg-surface-2 font-semibold', !n.isActive && 'text-ink-faint')}>
                     <td className="grid-td">
                       <div className="flex items-center gap-1" style={{ paddingLeft: n.level * 16 }}>
                         {n.children.length ? (
                           <button className="text-ink-muted" onClick={() => setOpen((s) => { const x = new Set(s); if (x.has(n.id)) x.delete(n.id); else x.add(n.id); return x; })}>
                             {isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                          </button>
+                        ) : side ? (
+                          <button className="text-ink-muted" title={side === 'CUSTOMER' ? 'Show customers' : 'Show suppliers'} onClick={() => toggleParty(side)}>
+                            {partiesOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                           </button>
                         ) : (
                           <span className="inline-block w-[13px]" />
@@ -200,6 +245,35 @@ function ChartOfAccountsScreen() {
                       </div>
                     </td>
                   </tr>
+                  {side && partiesOpen && headsLoading && (
+                    <tr className="h-8"><td colSpan={6} className="grid-td text-xs text-ink-faint" style={{ paddingLeft: (n.level + 1) * 16 + 24 }}>Loading {side === 'CUSTOMER' ? 'customers' : 'suppliers'}...</td></tr>
+                  )}
+                  {side && partiesOpen && !headsLoading && heads.length === 0 && !q && (
+                    <tr className="h-8"><td colSpan={6} className="grid-td text-xs text-ink-faint" style={{ paddingLeft: (n.level + 1) * 16 + 24 }}>No {side === 'CUSTOMER' ? 'customers' : 'suppliers'} with a balance.</td></tr>
+                  )}
+                  {heads.map((h) => (
+                    <tr key={`${side}-${h.partyId ?? 'x'}`} className={cn('h-8 hover:bg-brand-soft', !h.partyId && 'italic text-warning', !h.isActive && 'text-ink-faint')}>
+                      <td className="grid-td">
+                        <div className="flex items-center gap-1" style={{ paddingLeft: (n.level + 1) * 16 + 14 }}>
+                          <span className="tabular-nums text-ink-muted">{h.code}</span>
+                          <span>{h.name}</span>
+                        </div>
+                      </td>
+                      <td className="grid-td">{fmt.status(n.type)}</td>
+                      <td className="grid-td">{h.partyId ? <Badge tone="purple">{side === 'CUSTOMER' ? 'Customer' : 'Supplier'}</Badge> : <Badge tone="amber">Difference</Badge>}</td>
+                      <td className="grid-td text-right"><Money v={h.closing} /></td>
+                      <td className="grid-td">{h.partyId ? (h.isActive ? <Badge tone="green">Active</Badge> : <Badge tone="gray">Inactive</Badge>) : null}</td>
+                      <td className="grid-td">
+                        {h.partyId && (
+                          <div className="flex items-center gap-0.5">
+                            <IconButton icon={BookOpen} label="Open ledger" onClick={() => openScreen('general-ledger', { accountId: n.id, partyType: side ?? undefined, partyId: h.partyId ?? undefined }, `Ledger · ${h.name}`)} />
+                            <IconButton icon={side === 'CUSTOMER' ? Users : Truck} label={side === 'CUSTOMER' ? 'Open customer' : 'Open supplier'} onClick={() => openScreen(side === 'CUSTOMER' ? 'customer-form' : 'supplier-form', { id: h.partyId ?? undefined }, h.name)} />
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  </Fragment>
                 );
               })}
               {rows.length === 0 && (

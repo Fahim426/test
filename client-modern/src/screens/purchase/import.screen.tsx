@@ -121,7 +121,7 @@ function SupplierProformasScreen() {
     { key: 'baseTotal', header: 'Total (Base)', type: 'money', total: 'sum', sortable: false },
     { key: 'status', header: 'Status', type: 'status', width: 110 },
   ];
-  return <PurchaseList<SpRow> tableKey="supplier-proformas" url="/supplier-proformas" title="Supplier Proforma" formScreen="supplier-proforma-form" module="import_purchase" columns={cols} statuses={['RECEIVED', 'CONVERTED', 'CANCELLED']} newLabel="New Proforma" />;
+  return <PurchaseList<SpRow> tableKey="supplier-proformas" url="/supplier-proformas" title="Supplier Proforma" formScreen="supplier-proforma-form" module="import_purchase" columns={cols} statuses={['RECEIVED', 'PARTIALLY_CONVERTED', 'CONVERTED', 'CANCELLED']} newLabel="New Proforma" />;
 }
 
 const spSchema = z.object({
@@ -184,7 +184,7 @@ function SupplierProformaForm({ params, tabId }: ScreenProps) {
         title="Supplier Proforma Invoice" icon={FileText} docNo={sp?.docNo} status={status} loading={doc.isLoading || (!!requestId && req.isLoading)} error={doc.error}
         actions={
           <StdActions ctl={ctl} module="import_purchase" transitions={transitions} onSave={onSave} deleteStatuses={['RECEIVED', 'CANCELLED']}
-            extra={<DocAction icon={Globe} variant="primary" hidden={status !== 'RECEIVED'} onClick={() => setPoOpen(true)}>Create Import PO</DocAction>}
+            extra={<DocAction icon={Globe} variant="primary" hidden={!['RECEIVED', 'PARTIALLY_CONVERTED'].includes(status ?? '')} onClick={() => setPoOpen(true)}>Create Import PO</DocAction>}
           />
         }
       >

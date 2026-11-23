@@ -5,3 +5,4 @@ export * from './AttachmentsSection';
 export * from './ApprovalSection';
 export * from './AuditSection';
 export * from './DocumentFlow';
+export * from './PendingNote';
