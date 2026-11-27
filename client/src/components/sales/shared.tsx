@@ -189,13 +189,15 @@ export function useSalesActions(base: string, id: number | string | undefined, i
 }
 
 export async function openPdf(type: string, id: number | string) {
+  const preview = window.open('about:blank', '_blank');
   try {
     const r = await api.get(`/documents/${type}/${id}/pdf`, { responseType: 'blob' });
     const url = URL.createObjectURL(r.data as Blob);
-    const w = window.open(url, '_blank');
-    if (!w) toast.warning('Pop-up blocked: allow pop-ups to view the PDF');
+    if (preview && !preview.closed) preview.location.replace(url);
+    else toast.warning('Allow pop-ups for this site, then click PDF / Print again');
     setTimeout(() => URL.revokeObjectURL(url), 120_000);
   } catch (e) {
+    preview?.close();
     toast.error(apiError(e) || 'Could not generate PDF');
   }
 }

@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Ban, CheckCheck, ClipboardCheck, Minus, PackageOpen, Plus, Printer, ScanLine, Save, Trash2, Truck } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection } from '@/components/doc';
+import { useProductInfoColumns, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button, EmptyState, Field, Input, StatusBadge } from '@/components/ui';
 import { useDocument } from '@/hooks/useDocument';
 import { useAuth } from '@/store/auth';
@@ -80,6 +80,7 @@ const PickingsList = PickingsList_;
 
 /* ---------------------------------- FORM ---------------------------------- */
 function PickingForm({ params, tabId }: ScreenProps) {
+  const productInfoCount = useProductInfoColumns().length;
   const doc = useDocument<AnyRec>(URL, params.id, { tabId });
   const can = usePermission();
   const user = useAuth((s) => s.user);
@@ -221,6 +222,7 @@ function PickingForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType={TYPE} docId={doc.id} />
         {dirty && editable && <InfoBanner tone="amber">You have unsaved picked quantities. Press <b>Save Picking</b> to record them.</InfoBanner>}
         <HeaderSection title="Picking Information" columns={4}>
           <Field label="Picking Number"><Input value={doc.data?.docNo ?? ''} readOnly /></Field>
@@ -240,7 +242,7 @@ function PickingForm({ params, tabId }: ScreenProps) {
         <DocSection
           title="Items to Pick"
           right={
-            <div className="flex items-center gap-3 text-[12px]">
+            <div className="flex items-center gap-3 text-[13px]">
               <label className="inline-flex items-center gap-1"><input type="checkbox" checked={sortLoc} onChange={(e) => setSortLoc(e.target.checked)} /> Sort by rack / shelf / bin</label>
               <span className="font-semibold">Picked {fmt.qty(totals.picked)} / {fmt.qty(totals.ordered)}</span>
             </div>
@@ -258,12 +260,12 @@ function PickingForm({ params, tabId }: ScreenProps) {
               />
             </div>
           )}
-          <div className="overflow-auto border border-app-border">
+          <div className="overflow-auto border border-line">
             <table className="w-full border-separate border-spacing-0 text-[13px]">
               <thead>
                 <tr className="h-8">
                   <th className="grid-th">Product</th>
-                  <th className="grid-th">OEM</th>
+                  <ProductInfoHeads />
                   <th className="grid-th">Description</th>
                   <th className="grid-th text-center">Rack</th>
                   <th className="grid-th text-center">Shelf</th>
@@ -281,9 +283,9 @@ function PickingForm({ params, tabId }: ScreenProps) {
                   const pend = ord - pk;
                   const done = pend <= 0.0005;
                   return (
-                    <tr key={i.id} className={cn('h-14', done ? 'bg-green-50' : pk > 0 ? 'bg-amber-50' : 'bg-white')}>
+                    <tr key={i.id} className={cn('h-14', done ? 'bg-success-soft' : pk > 0 ? 'bg-warning-soft' : 'bg-surface')}>
                       <td className="grid-td text-[14px] font-bold">{i.product?.code}</td>
-                      <td className="grid-td">{i.product?.oemNumber}</td>
+                      <ProductInfoCells line={i} />
                       <td className="grid-td">{i.product?.name}</td>
                       <td className="grid-td text-center text-[15px] font-bold">{i.rack ?? '-'}</td>
                       <td className="grid-td text-center text-[15px] font-bold">{i.shelf ?? '-'}</td>
@@ -293,7 +295,7 @@ function PickingForm({ params, tabId }: ScreenProps) {
                       <td className="grid-td">
                         <div className="flex items-center justify-center gap-1">
                           {editable && (
-                            <button type="button" className="h-10 w-10 rounded border border-app-border bg-white hover:bg-slate-100" onClick={() => setQty(i, pk - 1)} aria-label="minus one">
+                            <button type="button" className="h-10 w-10 rounded-lg border border-line bg-surface hover:bg-surface-2" onClick={() => setQty(i, pk - 1)} aria-label="minus one">
                               <Minus size={16} className="mx-auto" />
                             </button>
                           )}
@@ -310,38 +312,37 @@ function PickingForm({ params, tabId }: ScreenProps) {
                           />
                           {editable && (
                             <>
-                              <button type="button" className="h-10 w-10 rounded border border-app-border bg-white hover:bg-slate-100" onClick={() => setQty(i, pk + 1)} aria-label="plus one">
+                              <button type="button" className="h-10 w-10 rounded-lg border border-line bg-surface hover:bg-surface-2" onClick={() => setQty(i, pk + 1)} aria-label="plus one">
                                 <Plus size={16} className="mx-auto" />
                               </button>
-                              <button type="button" className="h-10 rounded border border-green-600 bg-green-600 px-2 text-[12px] font-semibold text-white hover:bg-green-700" onClick={() => setQty(i, ord)}>
+                              <button type="button" className="h-10 rounded-lg border border-success bg-success px-2 text-[13px] font-semibold text-white hover:bg-success" onClick={() => setQty(i, ord)}>
                                 Full
                               </button>
                             </>
                           )}
                         </div>
                       </td>
-                      <td className={cn('grid-td text-right text-[15px] font-bold tabular-nums', done ? 'text-green-700' : 'text-red-600')}>{fmt.qty(pend)}</td>
+                      <td className={cn('grid-td text-right text-[15px] font-bold tabular-nums', done ? 'text-success' : 'text-danger')}>{fmt.qty(pend)}</td>
                     </tr>
                   );
                 })}
-                {!items.length && <tr><td colSpan={10} className="p-4 text-center text-slate-400">No lines</td></tr>}
+                {!items.length && <tr><td colSpan={9 + productInfoCount} className="p-4 text-center text-ink-faint">No lines</td></tr>}
               </tbody>
               <tfoot>
                 <tr className="h-8">
-                  <td colSpan={6} className="border-t-2 border-app-border bg-app-head px-2 font-semibold">Total</td>
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.qty(totals.ordered)}</td>
-                  <td className="border-t-2 border-app-border bg-app-head" />
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-center font-semibold tabular-nums">{fmt.qty(totals.picked)}</td>
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.qty(totals.pending)}</td>
+                  <td colSpan={5 + productInfoCount} className="border-t-2 border-line bg-surface-2 px-3 font-semibold">Total</td>
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(totals.ordered)}</td>
+                  <td className="border-t-2 border-line bg-surface-2" />
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-center font-semibold tabular-nums">{fmt.qty(totals.picked)}</td>
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(totals.pending)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">Partial picking is allowed: save what has been picked so far and continue later. Picked quantity can never exceed the quantity on the list or the reserved stock.</div>
+          <div className="mt-1 text-xs text-ink-muted">Partial picking is allowed: save what has been picked so far and continue later. Picked quantity can never exceed the quantity on the list or the reserved stock.</div>
         </DocSection>
 
         <AttachmentsSection docType={TYPE} docId={doc.id} />
-        <DocumentFlow docType={TYPE} docId={doc.id} />
         <AuditSection doc={doc.data} />
       </DocumentLayout>
     </>

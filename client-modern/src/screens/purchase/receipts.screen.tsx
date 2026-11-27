@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Anchor, ArrowDownToLine, PackagePlus, Receipt, Send, Undo2, XCircle, Eraser } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column, RowAction } from '@/components/DataTable';
-import { DocAction, DocSection, DocumentLayout, HeaderSection, NotesSection } from '@/components/doc';
+import { useProductInfoColumns, DocAction, DocSection, DocumentLayout, HeaderSection, NotesSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button } from '@/components/ui';
 import { useOpenScreen } from '@/store/workspace';
 import { usePermission } from '@/store/auth';
@@ -99,6 +99,7 @@ function SourcePicker({ onPick }: { onPick: (s: { orderId: number; shipmentId?: 
 
 /* ------------------------------------------------------------------ lines table */
 function GrnLines({ editable }: { editable: boolean }) {
+  const productInfoCount = useProductInfoColumns().length;
   const { register, control, setValue, formState } = useFormContext();
   const items = (useWatch({ control, name: 'items' }) as any[] | undefined) ?? [];
   const tot = items.reduce((a, l) => ({ ordered: a.ordered + num(l.orderedQty), prev: a.prev + num(l.previouslyReceived), cur: a.cur + num(l.qty), pending: a.pending + Math.max(0, num(l.orderedQty) - num(l.previouslyReceived) - num(l.qty)), value: a.value + num(l.qty) * num(l.unitCost) }), { ordered: 0, prev: 0, cur: 0, pending: 0, value: 0 });
@@ -114,7 +115,7 @@ function GrnLines({ editable }: { editable: boolean }) {
         <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr className="h-9">
-              <th className="grid-th w-8 text-center">#</th><th className="grid-th w-[120px]">Product</th><th className="grid-th w-[120px]">OEM</th><th className="grid-th">Description</th>
+              <th className="grid-th w-8 text-center">#</th><th className="grid-th w-[120px]">Product</th><ProductInfoHeads /><th className="grid-th">Description</th>
               <th className="grid-th !text-right">Ordered Qty</th><th className="grid-th !text-right">Previously Received</th><th className="grid-th !text-right bg-brand-soft">Current Receipt</th>
               <th className="grid-th !text-right">Pending Qty</th><th className="grid-th !text-right">Unit Cost</th><th className="grid-th !text-right">Value</th>
             </tr>
@@ -127,7 +128,7 @@ function GrnLines({ editable }: { editable: boolean }) {
                 <tr key={l.orderItemId ?? l.id ?? i} className="h-9 odd:bg-surface even:bg-surface-2">
                   <td className="grid-td text-center text-ink-faint">{i + 1}</td>
                   <td className="grid-td">{l.product?.code}</td>
-                  <td className="grid-td">{l.product?.oemNumber ?? l.oemNumber}</td>
+                  <ProductInfoCells line={l} />
                   <td className="grid-td">{l.product?.name ?? l.description}</td>
                   <td className="grid-td text-right tabular-nums">{fmt.qty(l.orderedQty)}</td>
                   <td className="grid-td text-right tabular-nums">{fmt.qty(l.previouslyReceived)}</td>
@@ -148,11 +149,11 @@ function GrnLines({ editable }: { editable: boolean }) {
                 </tr>
               );
             })}
-            {items.length === 0 && <tr><td colSpan={10} className="p-4 text-center text-ink-faint">No lines</td></tr>}
+            {items.length === 0 && <tr><td colSpan={9 + productInfoCount} className="p-4 text-center text-ink-faint">No lines</td></tr>}
           </tbody>
           <tfoot>
             <tr className="h-9 bg-surface-2 font-semibold">
-              <td className="border-t-2 border-line bg-surface-2" colSpan={4}><span className="px-2">Total</span></td>
+              <td className="border-t-2 border-line bg-surface-2" colSpan={3 + productInfoCount}><span className="px-2">Total</span></td>
               <td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.qty(tot.ordered)}</td>
               <td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.qty(tot.prev)}</td>
               <td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.qty(tot.cur)}</td>

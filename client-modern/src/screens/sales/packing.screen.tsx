@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Ban, PackageCheck, PackageOpen, Plus, Printer, Save, Trash2, Truck } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection } from '@/components/doc';
+import { useProductInfoColumns, ProductInfoHeads, ProductInfoCells, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection } from '@/components/doc';
 import { Button, DateInput, EmptyState, Field, Input, NumberInput, Select, StatusBadge, Textarea } from '@/components/ui';
 import { useDocument } from '@/hooks/useDocument';
 import { usePermission, useAuth } from '@/store/auth';
@@ -77,6 +77,7 @@ interface PackRow {
 }
 
 function PackingForm({ params, tabId }: ScreenProps) {
+  const productInfoCount = useProductInfoColumns().length;
   const doc = useDocument<AnyRec>(URL, params.id, { tabId });
   const can = usePermission();
   const ws = useWorkspace();
@@ -250,7 +251,7 @@ function PackingForm({ params, tabId }: ScreenProps) {
                 <tr className="h-9">
                   <th className="grid-th w-8">#</th>
                   <th className="grid-th w-[80px]">Box No</th>
-                  <th className="grid-th">Product</th>
+                  <th className="grid-th">Product</th><ProductInfoHeads />
                   <th className="grid-th !text-right w-[90px]">Picked</th>
                   <th className="grid-th !text-right w-[100px]">Qty</th>
                   <th className="grid-th !text-right w-[110px]">Weight (kg)</th>
@@ -265,6 +266,7 @@ function PackingForm({ params, tabId }: ScreenProps) {
                     <td className="grid-td">
                       <Select value={r.productId} disabled={!editable} options={prodOpts} placeholder="Select product..." onChange={(e) => upd(r.key, { productId: e.target.value ? Number(e.target.value) : '' })} />
                     </td>
+                    <ProductInfoCells line={{ product: [...(doc.data?.items ?? []), ...(pick.data?.items ?? [])].find(i => i.productId === Number(r.productId))?.product }} />
                     <td className="grid-td text-right tabular-nums">{r.productId ? fmt.qty(pickedByProduct.get(Number(r.productId)) ?? 0) : ''}</td>
                     <td className="grid-td"><NumberInput min={0} value={r.qty} disabled={!editable} onChange={(e) => upd(r.key, { qty: Number(e.target.value) })} /></td>
                     <td className="grid-td"><NumberInput min={0} value={r.weight} disabled={!editable} onChange={(e) => upd(r.key, { weight: Number(e.target.value) })} /></td>
@@ -275,11 +277,11 @@ function PackingForm({ params, tabId }: ScreenProps) {
                     )}
                   </tr>
                 ))}
-                {!rows.length && <tr><td colSpan={7} className="p-3 text-center text-ink-faint">No lines</td></tr>}
+                {!rows.length && <tr><td colSpan={7 + productInfoCount} className="p-3 text-center text-ink-faint">No lines</td></tr>}
               </tbody>
               <tfoot>
                 <tr className="h-9">
-                  <td colSpan={4} className="border-t-2 border-line bg-surface-2 px-3 font-semibold">Total</td>
+                  <td colSpan={4 + productInfoCount} className="border-t-2 border-line bg-surface-2 px-3 font-semibold">Total</td>
                   <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(rows.reduce((s, r) => s + num(r.qty), 0))}</td>
                   <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(sumWeight)}</td>
                   {editable && <td className="border-t-2 border-line bg-surface-2" />}

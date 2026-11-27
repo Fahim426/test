@@ -7,7 +7,7 @@ import { Anchor, Plus, RefreshCw, Send, Trash2, XCircle } from 'lucide-react';
 import { Controller, useFieldArray } from 'react-hook-form';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { DocSection, DocumentLayout, HeaderSection, NotesSection } from '@/components/doc';
+import { DocSection, DocumentLayout, HeaderSection, NotesSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button } from '@/components/ui';
 import { useOpenScreen } from '@/store/workspace';
 import { api, apiError } from '@/lib/api';
@@ -56,41 +56,41 @@ function ChargesGrid({ editable, suppliers }: { editable: boolean; suppliers: { 
   const total = r2(charges.reduce((s, c) => s + num(c.amount), 0));
   return (
     <DocSection title="Additional charges (base currency)" right={editable ? <Button size="sm" icon={Plus} onClick={() => append({ chargeType: 'FREIGHT', description: '', amount: 0, supplierId: '' })}>Add charge</Button> : undefined} bodyClassName="p-0">
-      <table className="w-full border-separate border-spacing-0 text-[12px]">
+      <table className="w-full border-separate border-spacing-0 text-[13px]">
         <thead>
-          <tr className="h-7"><th className="grid-th w-8 text-center">#</th><th className="grid-th w-[180px]">Charge Type</th><th className="grid-th">Description</th><th className="grid-th !text-right w-[140px]">Amount</th><th className="grid-th w-[260px]">Billed by supplier (AP) - blank = accrual</th>{editable && <th className="grid-th w-8" />}</tr>
+          <tr className="h-9"><th className="grid-th w-8 text-center">#</th><th className="grid-th w-[180px]">Charge Type</th><th className="grid-th">Description</th><th className="grid-th !text-right w-[140px]">Amount</th><th className="grid-th w-[260px]">Billed by supplier (AP) - blank = accrual</th>{editable && <th className="grid-th w-8" />}</tr>
         </thead>
         <tbody>
           {fields.map((f, i) => {
             const c = charges[i] ?? {};
             return (
-              <tr key={f.id} className="odd:bg-white even:bg-slate-50/60">
-                <td className="grid-td text-center text-slate-400">{i + 1}</td>
+              <tr key={f.id} className="h-9 odd:bg-surface even:bg-surface-2">
+                <td className="grid-td text-center text-ink-faint">{i + 1}</td>
                 <td className="grid-td !p-0">
-                  {editable ? <select className="ctl !h-6 !rounded-none" {...register(`charges.${i}.chargeType`)}>{CHARGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select> : <span className="px-2">{CHARGE_OPTIONS.find((o) => o.value === c.chargeType)?.label}</span>}
+                  {editable ? <select className="ctl !h-8 !rounded-none" {...register(`charges.${i}.chargeType`)}>{CHARGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select> : <span className="px-2">{CHARGE_OPTIONS.find((o) => o.value === c.chargeType)?.label}</span>}
                 </td>
-                <td className="grid-td !p-0">{editable ? <input className="ctl !h-6 !rounded-none" {...register(`charges.${i}.description`)} /> : <span className="px-2">{c.description}</span>}</td>
+                <td className="grid-td !p-0">{editable ? <input className="ctl !h-8 !rounded-none" {...register(`charges.${i}.description`)} /> : <span className="px-2">{c.description}</span>}</td>
                 <td className="grid-td !p-0 text-right">
-                  {editable ? <input type="number" step="any" min={0} className="ctl !h-6 !rounded-none text-right tabular-nums" {...register(`charges.${i}.amount`, { setValueAs: (v) => (v === '' || v == null ? 0 : Number(v)) })} onFocus={(e) => e.target.select()} /> : <span className="px-2 tabular-nums">{fmt.money(c.amount)}</span>}
+                  {editable ? <input type="number" step="any" min={0} className="ctl !h-8 !rounded-none text-right tabular-nums" {...register(`charges.${i}.amount`, { setValueAs: (v) => (v === '' || v == null ? 0 : Number(v)) })} onFocus={(e) => e.target.select()} /> : <span className="px-2 tabular-nums">{fmt.money(c.amount)}</span>}
                 </td>
                 <td className="grid-td !p-0">
                   {editable ? (
                     <Controller name={`charges.${i}.supplierId`} control={control} render={({ field }) => (
-                      <select className="ctl !h-6 !rounded-none" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}><option value="">(accrual - GRNI)</option>{suppliers.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
+                      <select className="ctl !h-8 !rounded-none" value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value)}><option value="">(accrual - GRNI)</option>{suppliers.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
                     )} />
                   ) : <span className="px-2">{c.supplier?.name ?? '(accrual)'}</span>}
                 </td>
-                {editable && <td className="grid-td !px-1 text-center"><button type="button" className="rounded p-0.5 text-red-500 hover:bg-red-50" title="Remove" onClick={() => remove(i)}><Trash2 size={12} /></button></td>}
+                {editable && <td className="grid-td !px-1 text-center"><button type="button" className="rounded-lg p-0.5 text-danger hover:bg-danger-soft" title="Remove" onClick={() => remove(i)}><Trash2 size={12} /></button></td>}
               </tr>
             );
           })}
-          {fields.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-400">No charges. {editable && 'Add freight, insurance, customs duty, port, clearing, transport, handling or other charges.'}</td></tr>}
+          {fields.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-ink-faint">No charges. {editable && 'Add freight, insurance, customs duty, port, clearing, transport, handling or other charges.'}</td></tr>}
         </tbody>
         <tfoot>
-          <tr className="h-7 bg-app-head font-semibold"><td colSpan={3} className="border-t-2 border-app-border bg-app-head px-2">Total additional cost</td><td className="border-t-2 border-app-border bg-app-head px-2 text-right tabular-nums">{fmt.money(total)}</td><td colSpan={2} className="border-t-2 border-app-border bg-app-head" /></tr>
+          <tr className="h-9 bg-surface-2 font-semibold"><td colSpan={3} className="border-t-2 border-line bg-surface-2 px-3">Total additional cost</td><td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.money(total)}</td><td colSpan={2} className="border-t-2 border-line bg-surface-2" /></tr>
         </tfoot>
       </table>
-      {(formState.errors.charges as any)?.message && <div className="p-1 text-[11px] text-red-600">{(formState.errors.charges as any).message}</div>}
+      {(formState.errors.charges as any)?.message && <div className="p-1 text-xs text-danger">{(formState.errors.charges as any).message}</div>}
     </DocSection>
   );
 }
@@ -185,29 +185,30 @@ function LandedCostForm({ params, tabId }: ScreenProps) {
 
         <ChargesGrid editable={editable} suppliers={lk.supplierOptions} />
 
-        <DocSection title={editable ? 'Allocation Preview' : 'Allocation'} right={preview.isFetching ? <span className="text-[11px] text-slate-500">calculating...</span> : undefined} bodyClassName="p-0">
-          {preview.isError && editable && <div className="m-2 rounded border border-red-300 bg-red-50 px-3 py-1.5 text-[12px] text-red-700">{apiError(preview.error)}</div>}
-          {!ready && editable && <div className="p-4 text-center text-[12px] text-slate-500">Select an import goods receipt and enter charges to preview the allocation.</div>}
+        <DocSection title={editable ? 'Allocation Preview' : 'Allocation'} right={preview.isFetching ? <span className="text-xs text-ink-muted">calculating...</span> : undefined} bodyClassName="p-0">
+          {preview.isError && editable && <div className="m-2 rounded-lg border border-danger bg-danger-soft px-3 py-1.5 text-[13px] text-danger">{apiError(preview.error)}</div>}
+          {!ready && editable && <div className="p-4 text-center text-[13px] text-ink-muted">Select an import goods receipt and enter charges to preview the allocation.</div>}
           {lines.length > 0 && (
             <>
-              <div className="flex flex-wrap gap-6 border-b border-app-border bg-app-head px-3 py-1.5 text-[12px]">
+              <div className="flex flex-wrap gap-6 border-b border-line bg-surface-2 px-3 py-1.5 text-[13px]">
                 <span>Product cost: <b className="tabular-nums">{fmt.money(productCost)}</b></span>
                 <span>Additional costs: <b className="tabular-nums">{fmt.money(totalAdditional)}</b></span>
                 <span>Actual landed cost: <b className="tabular-nums text-brand">{fmt.money(actual)}</b></span>
-                <span className="text-slate-500">{Object.entries(byType).map(([k, v]) => `${fmt.status(k)} ${fmt.money(v)}`).join(' · ')}</span>
+                <span className="text-ink-muted">{Object.entries(byType).map(([k, v]) => `${fmt.status(k)} ${fmt.money(v)}`).join(' · ')}</span>
               </div>
               <div className="overflow-auto">
-                <table className="w-full border-separate border-spacing-0 text-[12px]">
-                  <thead><tr className="h-7"><th className="grid-th w-8 text-center">#</th><th className="grid-th">Product</th><th className="grid-th !text-right">Qty</th><th className="grid-th !text-right">Product Cost</th><th className="grid-th !text-right">Allocated Cost</th><th className="grid-th !text-right">Old Unit Cost</th><th className="grid-th !text-right bg-brand-light">New Unit Cost</th><th className="grid-th !text-right">Increase</th></tr></thead>
+                <table className="w-full border-separate border-spacing-0 text-[13px]">
+                  <thead><tr className="h-9"><th className="grid-th w-8 text-center">#</th><th className="grid-th">Product</th><ProductInfoHeads /><th className="grid-th !text-right">Qty</th><th className="grid-th !text-right">Product Cost</th><th className="grid-th !text-right">Allocated Cost</th><th className="grid-th !text-right">Old Unit Cost</th><th className="grid-th !text-right bg-brand-soft">New Unit Cost</th><th className="grid-th !text-right">Increase</th></tr></thead>
                   <tbody>
                     {lines.map((l, i) => {
                       const inc = num(l.oldUnitCost) ? ((num(l.newUnitCost) - num(l.oldUnitCost)) / num(l.oldUnitCost)) * 100 : 0;
                       return (
-                        <tr key={l.receiptItemId ?? i} className="odd:bg-white even:bg-slate-50/60">
-                          <td className="grid-td text-center text-slate-400">{i + 1}</td><td className="grid-td">{l.product?.code} <span className="text-slate-500">{l.product?.name}</span></td>
+                        <tr key={l.receiptItemId ?? i} className="h-9 odd:bg-surface even:bg-surface-2">
+                          <td className="grid-td text-center text-ink-faint">{i + 1}</td><td className="grid-td">{l.product?.code} <span className="text-ink-muted">{l.product?.name}</span></td>
+                          <ProductInfoCells line={l} />
                           <td className="grid-td text-right tabular-nums">{fmt.qty(l.qty)}</td><td className="grid-td text-right tabular-nums">{fmt.money(l.baseCost)}</td><td className="grid-td text-right tabular-nums">{fmt.money(l.allocated)}</td>
-                          <td className="grid-td text-right tabular-nums">{fmt.num(l.oldUnitCost, 4)}</td><td className={cn('grid-td bg-brand-light/40 text-right font-semibold tabular-nums')}>{fmt.num(l.newUnitCost, 4)}</td>
-                          <td className="grid-td text-right tabular-nums text-amber-700">+{fmt.num(inc, 1)}%</td>
+                          <td className="grid-td text-right tabular-nums">{fmt.num(l.oldUnitCost, 4)}</td><td className={cn('grid-td bg-brand-soft text-right font-semibold tabular-nums')}>{fmt.num(l.newUnitCost, 4)}</td>
+                          <td className="grid-td text-right tabular-nums text-warning">+{fmt.num(inc, 1)}%</td>
                         </tr>
                       );
                     })}

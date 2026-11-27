@@ -1,10 +1,11 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { get, useFieldArray, useFormContext, useWatch, UseFormReturn, FieldValues } from 'react-hook-form';
 import { Copy, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { fmt } from '@/lib/format';
 import { num } from '@/lib/calc';
 import { ProductLookup, ProductPicker } from './ProductPicker';
+import { useProductInfoColumns, productInfoOf } from './ProductInfo';
 import type { SelectOption } from '@/components/ui';
 
 export type Line = Record<string, unknown>;
@@ -27,6 +28,8 @@ export interface LineColumn {
   total?: boolean;
   min?: number;
   required?: boolean;
+  /** readonly text columns: cut long values to the column width (full value on hover) */
+  truncate?: boolean;
 }
 
 export interface LineItemsGridProps {
@@ -47,9 +50,11 @@ export interface LineItemsGridProps {
   className?: string;
   /** extra element in the footer bar (left) */
   footerExtra?: React.ReactNode;
+  /** Stock No / OEM No / Alt No / Brand / Vehicle columns after the Product column (default: shown) */
+  productInfo?: boolean;
 }
 
-const cellCls = 'ctl !h-6 !rounded-none !border-transparent bg-transparent hover:!border-app-border focus:!bg-white';
+const cellCls = 'ctl !h-8 !rounded-md !border-transparent !bg-transparent !px-2 !text-[13px] hover:!border-line-strong focus:!border-brand focus:!bg-surface';
 
 function show(v: unknown, format?: LineColumn['format'], type?: LineColumn['type']): string {
   if (v === null || v === undefined || v === '') return '';
@@ -58,14 +63,29 @@ function show(v: unknown, format?: LineColumn['format'], type?: LineColumn['type
 }
 
 export function LineItemsGrid({
-  name = 'items', columns, newLine, readOnly, warehouseId, priceField = 'costPrice', onProductPick, minRows = 0, maxHeight, className, footerExtra,
+  name = 'items', columns, newLine, readOnly, warehouseId, priceField = 'costPrice', onProductPick, minRows = 0, maxHeight, className, footerExtra, productInfo = true,
 }: LineItemsGridProps) {
   const form = useFormContext();
   const { control, register, setValue, formState } = form;
   const { fields, append, remove, insert } = useFieldArray({ control, name });
   const lines = (useWatch({ control, name }) as Line[] | undefined) ?? [];
   const body = useRef<HTMLTableSectionElement>(null);
-  const cols = columns;
+  // item details after the Product column; skipped where the form already has its own column with that key
+  const infoColumns = useProductInfoColumns();
+  const cols = useMemo(() => {
+    if (!productInfo) return columns;
+    const at = columns.findIndex((c) => c.type === 'product');
+    if (at < 0) return columns;
+    const info: LineColumn[] = infoColumns.filter((c) => !columns.some((x) => x.key === c.key)).map((c) => ({
+      key: `__${c.key}`,
+      header: c.header,
+      type: 'readonly' as const,
+      width: c.w,
+      truncate: true,
+      compute: (l: Line) => (productInfoOf(l)[c.key] as string | null | undefined) ?? '',
+    }));
+    return [...columns.slice(0, at + 1), ...info, ...columns.slice(at + 1)].filter(c => c.key !== 'oemNumber' || infoColumns.some(i => i.key === 'oemNumber'));
+  }, [columns, productInfo, infoColumns]);
 
   const cells = useCallback(
     () => Array.from(body.current?.querySelectorAll<HTMLElement>('[data-r]') ?? []).filter((el) => !(el as HTMLInputElement).disabled && (el as HTMLInputElement).type !== 'hidden'),
@@ -126,12 +146,12 @@ export function LineItemsGrid({
   void showRows;
 
   return (
-    <div className={cn('border border-app-border bg-white', className)}>
+    <div className={cn('overflow-hidden rounded-card border border-line bg-surface shadow-card', className)}>
       <div className="overflow-auto" style={{ maxHeight }}>
-        <table className="w-full border-separate border-spacing-0 text-[12px]" onKeyDown={onKeyDown}>
+        <table className="w-full border-separate border-spacing-0 text-[13px]" onKeyDown={onKeyDown}>
           <thead>
-            <tr className="h-7">
-              <th className="grid-th w-8 text-center">#</th>
+            <tr className="h-10">
+              <th className="grid-th w-10 text-center">#</th>
               {cols.map((c) => (
                 <th
                   key={c.key}
@@ -139,7 +159,7 @@ export function LineItemsGrid({
                   className={cn('grid-th whitespace-nowrap', (c.align === 'right' || ['number', 'money', 'qty', 'percent', 'computed'].includes(c.type ?? '')) && '!text-right')}
                 >
                   {c.header}
-                  {c.required && !readOnly && <span className="text-red-500"> *</span>}
+                  {c.required && !readOnly && <span className="text-danger"> *</span>}
                 </th>
               ))}
               {!readOnly && <th className="grid-th w-[58px]" />}
@@ -148,7 +168,7 @@ export function LineItemsGrid({
           <tbody ref={body}>
             {fields.length === 0 && (
               <tr>
-                <td colSpan={cols.length + 2} className="p-4 text-center text-[12px] text-slate-400">
+                <td colSpan={cols.length + 2} className="p-8 text-center text-[13px] text-ink-faint">
                   No lines. {!readOnly && 'Click "Add line" or press Ctrl+Enter.'}
                 </td>
               </tr>
@@ -156,8 +176,8 @@ export function LineItemsGrid({
             {fields.map((f, i) => {
               const line = lines[i] ?? {};
               return (
-                <tr key={f.id} className="h-7 odd:bg-white even:bg-slate-50/60 hover:bg-brand-light/50">
-                  <td className="grid-td text-center text-slate-400">{i + 1}</td>
+                <tr key={f.id} className="h-11 transition-colors even:bg-surface-2/50 hover:bg-brand-soft/40">
+                  <td className="grid-td text-center text-xs text-ink-faint">{i + 1}</td>
                   {cols.map((c) => {
                     const path = `${name}.${i}.${c.key}`;
                     const err = get(formState.errors, path) as { message?: string } | undefined;
@@ -174,11 +194,14 @@ export function LineItemsGrid({
                           <ProductPicker
                             text={lt}
                             warehouseId={warehouseId}
+                            priceMode={priceField === 'retailPrice' || priceField === 'wholesalePrice' ? 'sales' : 'purchase'}
                             disabled={!editable}
                             inputProps={{ ...common, 'aria-invalid': !!err }}
-                            className={err ? '!border-red-500' : ''}
+                            className={err ? '!border-danger' : ''}
                             onPick={(p) => {
                               (onProductPick ?? ((pp, ii) => defaultPick(pp, ii)))(p, i, form);
+                              // item details shown beside the product (also for forms with their own pick handler)
+                              setValue(`${name}.${i}.pinfo`, { stockNumber: p.stockNumber, oemNumber: p.oemNumber, altNo: p.altNo, brandName: p.brand, vehicle: p.vehicle });
                               setTimeout(() => {
                                 const all = cells();
                                 const cur = all.find((el) => el.dataset.r === String(i) && el.dataset.c === c.key);
@@ -188,7 +211,11 @@ export function LineItemsGrid({
                                 }
                               }, 40);
                             }}
-                            onClear={() => setValue(`${name}.${i}.productId`, undefined, { shouldDirty: true })}
+                            onClear={() => {
+                              setValue(`${name}.${i}.productId`, undefined, { shouldDirty: true });
+                              setValue(`${name}.${i}.pinfo`, {});
+                              setValue(`${name}.${i}.product`, undefined);
+                            }}
                           />
                         );
                         break;
@@ -196,14 +223,19 @@ export function LineItemsGrid({
                       case 'computed':
                       case 'readonly': {
                         const v = c.compute ? c.compute(line, i) : line[c.key];
-                        content = <span className={cn('block px-2', right && 'text-right tabular-nums', c.type === 'computed' && 'font-medium')}>{show(v, c.format ?? (c.type === 'computed' ? 'money' : undefined), c.type)}</span>;
+                        const txt = show(v, c.format ?? (c.type === 'computed' ? 'money' : undefined), c.type);
+                        content = (
+                          <span className={cn('block px-2', right && 'text-right tabular-nums', c.type === 'computed' && 'font-medium', c.truncate && 'truncate')} style={c.truncate && c.width ? { maxWidth: c.width + 40 } : undefined} title={c.truncate && txt ? txt : undefined}>
+                            {txt}
+                          </span>
+                        );
                         break;
                       }
                       case 'select':
                         content = readOnly ? (
                           <span className="px-2">{c.options?.find((o) => String(o.value) === String(line[c.key]))?.label ?? String(line[c.key] ?? '')}</span>
                         ) : (
-                          <select {...common} disabled={!editable} className={cn(cellCls, err && '!border-red-500')} {...register(path)}>
+                          <select {...common} disabled={!editable} className={cn(cellCls, err && '!border-danger')} {...register(path)}>
                             <option value="" />
                             {c.options?.map((o) => (
                               <option key={o.value} value={o.value}>{o.label}</option>
@@ -223,7 +255,7 @@ export function LineItemsGrid({
                             type="number"
                             step="any"
                             min={c.min}
-                            className={cn(cellCls, 'text-right tabular-nums', err && '!border-red-500')}
+                            className={cn(cellCls, 'text-right tabular-nums', err && '!border-danger')}
                             {...register(path, { setValueAs: (v: unknown) => (v === '' || v === null || v === undefined ? 0 : Number(v)) })}
                             onFocus={(e) => e.target.select()}
                           />
@@ -233,14 +265,14 @@ export function LineItemsGrid({
                         content = !editable ? (
                           <span className="px-2">{fmt.date(line[c.key] as string)}</span>
                         ) : (
-                          <input {...common} type="date" className={cn(cellCls, err && '!border-red-500')} {...register(path)} />
+                          <input {...common} type="date" className={cn(cellCls, err && '!border-danger')} {...register(path)} />
                         );
                         break;
                       default:
                         content = !editable ? (
                           <span className="block px-2">{String(line[c.key] ?? '')}</span>
                         ) : (
-                          <input {...common} className={cn(cellCls, err && '!border-red-500')} {...register(path)} onFocus={(e) => e.target.select()} />
+                          <input {...common} className={cn(cellCls, err && '!border-danger')} {...register(path)} onFocus={(e) => e.target.select()} />
                         );
                     }
                     return (
@@ -251,11 +283,11 @@ export function LineItemsGrid({
                   })}
                   {!readOnly && (
                     <td className="grid-td !px-1 text-center">
-                      <button type="button" tabIndex={-1} title="Duplicate line" className="rounded p-0.5 text-slate-500 hover:bg-slate-200" onClick={() => insert(i + 1, { ...(lines[i] ?? {}) })}>
-                        <Copy size={12} />
+                      <button type="button" tabIndex={-1} title="Duplicate line" className="rounded-md p-1 text-ink-faint transition hover:bg-surface-3 hover:text-ink" onClick={() => insert(i + 1, { ...(lines[i] ?? {}) })}>
+                        <Copy size={14} />
                       </button>
-                      <button type="button" tabIndex={-1} title="Remove line (Ctrl+Del)" className="rounded p-0.5 text-red-500 hover:bg-red-50" onClick={() => remove(i)}>
-                        <Trash2 size={12} />
+                      <button type="button" tabIndex={-1} title="Remove line (Ctrl+Del)" className="rounded-md p-1 text-ink-faint transition hover:bg-danger-soft hover:text-danger" onClick={() => remove(i)}>
+                        <Trash2 size={14} />
                       </button>
                     </td>
                   )}
@@ -265,28 +297,28 @@ export function LineItemsGrid({
           </tbody>
           {hasTotals && fields.length > 0 && (
             <tfoot>
-              <tr className="h-7">
-                <td className="sticky bottom-0 border-t-2 border-app-border bg-app-head" />
+              <tr className="h-10">
+                <td className="sticky bottom-0 border-t border-line-strong bg-surface-2" />
                 {cols.map((c, ci) => (
-                  <td key={c.key} className="sticky bottom-0 border-t-2 border-app-border bg-app-head px-2 text-right text-[12px] font-semibold tabular-nums">
+                  <td key={c.key} className="sticky bottom-0 border-t border-line-strong bg-surface-2 px-3 text-right text-[13px] font-semibold tabular-nums">
                     {c.total ? show(colSum(c), c.format ?? (c.type === 'qty' ? 'qty' : 'money')) : ci === 0 ? <span className="float-left">Total</span> : ''}
                   </td>
                 ))}
-                {!readOnly && <td className="sticky bottom-0 border-t-2 border-app-border bg-app-head" />}
+                {!readOnly && <td className="sticky bottom-0 border-t border-line-strong bg-surface-2" />}
               </tr>
             </tfoot>
           )}
         </table>
       </div>
       {!readOnly && (
-        <div className="no-print flex items-center gap-3 border-t border-app-border bg-app-head px-2 py-1">
-          <button type="button" onClick={addLine} className="inline-flex h-6 items-center gap-1 rounded border border-app-border bg-white px-2 text-[11px] hover:bg-slate-100">
-            <Plus size={12} /> Add line
+        <div className="no-print flex flex-wrap items-center gap-3 border-t border-line bg-surface-2/60 px-3 py-2">
+          <button type="button" onClick={addLine} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-dashed border-brand/40 bg-brand-soft/50 px-3 text-xs font-medium text-brand-ink transition hover:border-brand hover:bg-brand-soft">
+            <Plus size={14} /> Add line
           </button>
-          <span className="text-[10px] text-slate-500">Enter: next cell · Ctrl+Enter: new line · Ctrl+Del: remove line</span>
+          <span className="hidden text-[11px] text-ink-faint md:inline">Enter: next cell · Ctrl+Enter: new line · Ctrl+Del: remove line</span>
           <div className="flex-1" />
           {footerExtra}
-          <span className="text-[11px] text-slate-600">{fields.length} line(s)</span>
+          <span className="text-xs text-ink-muted">{fields.length} line(s)</span>
         </div>
       )}
     </div>

@@ -44,6 +44,7 @@ function StockBalancesScreen() {
 
   const base: Column<BalRow>[] = [
     { key: 'product.code', header: 'Code', width: 110, sortable: false },
+    { key: 'product.stockNumber', header: 'Stock No', width: 110, sortable: false },
     { key: 'product.oemNumber', header: 'Mfr Part No', width: 130, sortable: false },
     { key: 'product.name', header: 'Description', sortable: false },
     { key: 'product.brand.name', header: 'Brand', width: 100, sortable: false },
@@ -59,7 +60,7 @@ function StockBalancesScreen() {
   ];
   const columns: Column<BalRow>[] =
     mode === 'warehouse'
-      ? [...base.slice(0, 3), { key: 'warehouse.name', header: 'Warehouse', width: 140, sortable: false }, base[3], base[4], ...nums]
+      ? [...base.slice(0, 4), { key: 'warehouse.name', header: 'Warehouse', width: 140, sortable: false }, base[4], base[5], ...nums]
       : [...base, { key: 'warehouses', header: 'Whs', type: 'number', width: 50, sortable: false }, ...nums];
 
   return (

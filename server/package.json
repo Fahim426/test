@@ -8,6 +8,8 @@
     "build": "tsc -p .",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p .",
+    "machinery:test:flows": "node scripts/check-machinery-flows.cjs",
+    "machinery:test:ui": "node scripts/check-machinery-ui.cjs",
     "lint": "eslint src --ext .ts",
     "prisma:push": "prisma db push --skip-generate && prisma generate",
     "seed": "tsx prisma/seed.ts",

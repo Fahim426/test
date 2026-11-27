@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Ban, Banknote, Printer, Receipt, Save, Send, Trash2, Undo2 } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { ApprovalSection, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection, TotalsSection } from '@/components/doc';
+import { ProductInfoHeads, ProductInfoCells, ApprovalSection, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection, TotalsSection } from '@/components/doc';
 import { Button, Badge, DateInput, EmptyState, Field, Input, NumberInput, Select, Textarea } from '@/components/ui';
 import { useDocument } from '@/hooks/useDocument';
 import { usePermission } from '@/store/auth';
@@ -300,7 +300,7 @@ function InvoiceForm({ params, tabId }: ScreenProps) {
                 <tr className="h-7">
                   <th className="grid-th w-8">#</th>
                   <th className="grid-th">Product</th>
-                  <th className="grid-th">OEM</th>
+                  <ProductInfoHeads />
                   <th className="grid-th">Description</th>
                   <th className="grid-th !text-right w-[90px]">Qty</th>
                   <th className="grid-th !text-right w-[100px]">Rate</th>
@@ -319,7 +319,7 @@ function InvoiceForm({ params, tabId }: ScreenProps) {
                     <tr key={l.id} className={cn('h-7 odd:bg-white even:bg-slate-50/60', removed && 'opacity-40 line-through')}>
                       <td className="grid-td text-center text-slate-400">{n + 1}</td>
                       <td className="grid-td font-medium">{l.product?.code}</td>
-                      <td className="grid-td">{l.oemNumber}</td>
+                      <ProductInfoCells line={l} />
                       <td className="grid-td">{l.description}</td>
                       <td className="grid-td">
                         <NumberInput min={0} max={num(items[n].qty)} value={l.qty} disabled={!editable} onFocus={(e) => e.target.select()} onChange={(e) => upd(l.id, { qty: Math.min(num(items[n].qty), Number(e.target.value)) })} />

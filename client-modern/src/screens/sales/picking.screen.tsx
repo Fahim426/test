@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Ban, CheckCheck, ClipboardCheck, Minus, PackageOpen, Plus, Printer, ScanLine, Save, Trash2, Truck } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection } from '@/components/doc';
+import { useProductInfoColumns, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button, EmptyState, Field, Input, StatusBadge } from '@/components/ui';
 import { useDocument } from '@/hooks/useDocument';
 import { useAuth } from '@/store/auth';
@@ -80,6 +80,7 @@ const PickingsList = PickingsList_;
 
 /* ---------------------------------- FORM ---------------------------------- */
 function PickingForm({ params, tabId }: ScreenProps) {
+  const productInfoCount = useProductInfoColumns().length;
   const doc = useDocument<AnyRec>(URL, params.id, { tabId });
   const can = usePermission();
   const user = useAuth((s) => s.user);
@@ -264,7 +265,7 @@ function PickingForm({ params, tabId }: ScreenProps) {
               <thead>
                 <tr className="h-8">
                   <th className="grid-th">Product</th>
-                  <th className="grid-th">OEM</th>
+                  <ProductInfoHeads />
                   <th className="grid-th">Description</th>
                   <th className="grid-th text-center">Rack</th>
                   <th className="grid-th text-center">Shelf</th>
@@ -284,7 +285,7 @@ function PickingForm({ params, tabId }: ScreenProps) {
                   return (
                     <tr key={i.id} className={cn('h-14', done ? 'bg-success-soft' : pk > 0 ? 'bg-warning-soft' : 'bg-surface')}>
                       <td className="grid-td text-[14px] font-bold">{i.product?.code}</td>
-                      <td className="grid-td">{i.product?.oemNumber}</td>
+                      <ProductInfoCells line={i} />
                       <td className="grid-td">{i.product?.name}</td>
                       <td className="grid-td text-center text-[15px] font-bold">{i.rack ?? '-'}</td>
                       <td className="grid-td text-center text-[15px] font-bold">{i.shelf ?? '-'}</td>
@@ -325,11 +326,11 @@ function PickingForm({ params, tabId }: ScreenProps) {
                     </tr>
                   );
                 })}
-                {!items.length && <tr><td colSpan={10} className="p-4 text-center text-ink-faint">No lines</td></tr>}
+                {!items.length && <tr><td colSpan={9 + productInfoCount} className="p-4 text-center text-ink-faint">No lines</td></tr>}
               </tbody>
               <tfoot>
                 <tr className="h-8">
-                  <td colSpan={6} className="border-t-2 border-line bg-surface-2 px-3 font-semibold">Total</td>
+                  <td colSpan={5 + productInfoCount} className="border-t-2 border-line bg-surface-2 px-3 font-semibold">Total</td>
                   <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(totals.ordered)}</td>
                   <td className="border-t-2 border-line bg-surface-2" />
                   <td className="border-t-2 border-line bg-surface-2 px-3 text-center font-semibold tabular-nums">{fmt.qty(totals.picked)}</td>

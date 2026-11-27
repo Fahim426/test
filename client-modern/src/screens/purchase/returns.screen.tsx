@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowDownToLine, Eraser, Send, Undo2, XCircle } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { DocSection, DocumentLayout, HeaderSection, NotesSection, TotalsSection } from '@/components/doc';
+import { useProductInfoColumns, DocSection, DocumentLayout, HeaderSection, NotesSection, TotalsSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button } from '@/components/ui';
 import { useOpenScreen } from '@/store/workspace';
 import { api, apiError } from '@/lib/api';
@@ -73,6 +73,7 @@ function SourcePicker({ onPick }: { onPick: (s: { invoiceId?: number; receiptId?
 
 /* ------------------------------------------------------------------ lines */
 function ReturnLines({ editable, showInvoiced }: { editable: boolean; showInvoiced: boolean }) {
+  const productInfoCount = useProductInfoColumns().length;
   const { register, control, setValue, formState } = useFormContext();
   const items = (useWatch({ control, name: 'items' }) as any[] | undefined) ?? [];
   const all = () => items.forEach((l, i) => l.maxQty !== undefined && setValue(`items.${i}.qty`, num(l.maxQty), { shouldDirty: true }));
@@ -84,7 +85,7 @@ function ReturnLines({ editable, showInvoiced }: { editable: boolean; showInvoic
         <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr className="h-9">
-              <th className="grid-th w-8 text-center">#</th><th className="grid-th">Product</th><th className="grid-th">Description</th><th className="grid-th">GRN</th>
+              <th className="grid-th w-8 text-center">#</th><th className="grid-th">Product</th><ProductInfoHeads /><th className="grid-th">Description</th><th className="grid-th">GRN</th>
               {hasMax && <th className="grid-th !text-right">Received</th>}{hasMax && showInvoiced && <th className="grid-th !text-right">Invoiced</th>}{hasMax && <th className="grid-th !text-right">Max Returnable</th>}
               <th className="grid-th !text-right bg-brand-soft">Return Qty</th><th className="grid-th !text-right">Rate</th><th className="grid-th !text-right">VAT %</th><th className="grid-th !text-right">Amount</th>
             </tr>
@@ -96,7 +97,7 @@ function ReturnLines({ editable, showInvoiced }: { editable: boolean; showInvoic
               return (
                 <tr key={l.receiptItemId ?? i} className="h-9 odd:bg-surface even:bg-surface-2">
                   <td className="grid-td text-center text-ink-faint">{i + 1}</td>
-                  <td className="grid-td">{l.product?.code}</td><td className="grid-td">{l.product?.name ?? l.description}</td><td className="grid-td">{l.receiptNo}</td>
+                  <td className="grid-td">{l.product?.code}</td><ProductInfoCells line={l} /><td className="grid-td">{l.product?.name ?? l.description}</td><td className="grid-td">{l.receiptNo}</td>
                   {hasMax && <td className="grid-td text-right tabular-nums">{fmt.qty(l.qtyReceived)}</td>}
                   {hasMax && showInvoiced && <td className="grid-td text-right tabular-nums">{fmt.qty(l.invoicedQty)}</td>}
                   {hasMax && <td className="grid-td text-right tabular-nums">{fmt.qty(l.maxQty)}</td>}
@@ -111,7 +112,7 @@ function ReturnLines({ editable, showInvoiced }: { editable: boolean; showInvoic
                 </tr>
               );
             })}
-            {items.length === 0 && <tr><td colSpan={11} className="p-4 text-center text-ink-faint">No lines</td></tr>}
+            {items.length === 0 && <tr><td colSpan={11 + productInfoCount} className="p-4 text-center text-ink-faint">No lines</td></tr>}
           </tbody>
         </table>
       </div>

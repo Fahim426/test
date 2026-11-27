@@ -31,6 +31,8 @@ export interface ProductLookup {
   matchedPartNumber?: string | null;
   matchedPartBrand?: string | null;
   stockNumber?: string | null;
+  altNo?: string;
+  vehicle?: string;
   lastPurchaseAt?: string | null;
   label?: string;
 }
@@ -64,7 +66,7 @@ export function ProductPicker({
   inputProps?: React.InputHTMLAttributes<HTMLInputElement> & Record<`data-${string}`, string | undefined>;
 }) {
   const features = useFeatures();
-  const cols = priceMode === 'sales' ? 'grid-cols-[130px_150px_1fr_72px_72px_72px_72px_62px_62px]' : 'grid-cols-[130px_150px_1fr_80px_80px_62px_62px]';
+  const cols = '130px 100px minmax(180px,1fr) 100px' + (features.partNumbers ? ' 130px 130px' : '') + (features.vehicleCompatibility ? ' 150px' : '') + (priceMode === 'sales' ? ' 72px 72px' : '') + ' 80px 80px 62px 62px';
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(false);
   const [dq, setDq] = useState('');
@@ -119,7 +121,7 @@ export function ProductPicker({
     const below = vh - r.bottom - gap;
     const above = r.top - gap;
     const up = below < Math.min(ideal, 240) && above > below;
-    const width = Math.min(Math.max(r.width, priceMode === 'sales' ? 1040 : 900), vw - gap * 2);
+    const width = Math.min(Math.max(r.width, features.partNumbers || features.vehicleCompatibility ? 1440 : 1100), vw - gap * 2);
     const left = Math.max(gap, Math.min(r.left, vw - width - gap));
     const maxHeight = Math.max(120, Math.min(ideal, up ? above : below));
     return up ? { left, bottom: vh - r.top + 2, width, maxHeight } : { left, top: r.bottom + 2, width, maxHeight };
@@ -201,8 +203,8 @@ export function ProductPicker({
             style={place(rect)}
             onMouseDown={(e) => e.preventDefault()}
           >
-            <div className={`sticky top-0 grid ${cols} gap-2 border-b border-line bg-surface-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted`}>
-              <span>Code</span><span>Mfr / Alternate</span><span>Name</span>{priceMode === 'sales' && <><span className="text-right">Retail</span><span className="text-right">Whsale</span></>}<span className="text-right">Avg cost</span><span className="text-right">Last pur.</span><span className="text-right">On hand</span><span className="text-right">Avail.</span>
+            <div style={{ gridTemplateColumns: cols, minWidth: 1000 }} className={`sticky top-0 grid gap-2 border-b border-line bg-surface-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted`}>
+              <span>Code</span><span>Stock No</span><span>Machine / Product</span><span>Brand</span>{features.partNumbers && <><span>Manufacturer Ref</span><span>Alternate Ref</span></>}{features.vehicleCompatibility && <span>Compatibility</span>}{priceMode === 'sales' && <><span className="text-right">Retail</span><span className="text-right">Whsale</span></>}<span className="text-right">Avg cost</span><span className="text-right">Last pur.</span><span className="text-right">On hand</span><span className="text-right">Avail.</span>
             </div>
             {isFetching && list.length === 0 && <div className="px-3 py-3 text-ink-muted">Searching...</div>}
             {!isFetching && list.length === 0 && <div className="px-3 py-3 text-ink-muted">No products match &quot;{dq}&quot;</div>}
@@ -212,11 +214,14 @@ export function ProductPicker({
                 data-idx={i}
                 onClick={() => pick(p)}
                 onMouseEnter={() => setHi(i)}
-                className={cn('grid cursor-pointer gap-2 px-3 py-1.5', cols, i === hi && 'bg-brand-soft')}
+                style={{ gridTemplateColumns: cols, minWidth: 1000 }} className={cn('grid cursor-pointer gap-2 px-3 py-1.5', i === hi && 'bg-brand-soft')}
               >
                 <span className="truncate font-medium">{p.code}</span>
-                <span className="truncate text-ink-muted" title={p.stockNumber ? `Stock No ${p.stockNumber}` : undefined}>{p.matchedPartNumber && p.matchedPartNumber !== p.oemNumber ? `${p.matchedPartNumber}${p.matchedPartBrand ? ` (${p.matchedPartBrand})` : ''} *` : (p.oemNumber ?? '')}</span>
-                <span className="truncate">{p.name}{p.brand ? <span className="text-ink-faint"> · {p.brand}</span> : null}</span>
+                <span className="truncate text-ink-muted">{p.stockNumber ?? ''}</span>
+                <span className="truncate" title={p.name}>{p.name}</span>
+                <span className="truncate text-ink-muted">{p.brand}</span>
+                {features.partNumbers && <><span className="truncate" title={p.oemNumber ?? undefined}>{p.oemNumber}</span><span className="truncate" title={p.altNo}>{p.matchedPartNumber && p.matchedPartNumber !== p.oemNumber ? p.matchedPartNumber : p.altNo}</span></>}
+                {features.vehicleCompatibility && <span className="truncate" title={p.vehicle}>{p.vehicle}</span>}
                 {priceMode === 'sales' && (
                   <>
                     <span className="text-right tabular-nums">{fmt.money(p.retailPrice)}</span>

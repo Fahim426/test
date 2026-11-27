@@ -40,6 +40,7 @@ const productSelect = {
   id: true,
   code: true,
   name: true,
+  stockNumber: true,
   oemNumber: true,
   barcode: true,
   purchaseUnit: true,

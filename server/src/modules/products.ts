@@ -13,6 +13,7 @@ import { audit } from '../services/audit';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { nextCode } from '../services/admin-master';
 import { productHistory, productStock } from '../services/admin-history';
+import { productExtras } from '../lib/enrich';
 import { num, r3 } from '../lib/calc';
 import type { ModuleDef } from '../app';
 
@@ -266,6 +267,7 @@ r.get(
     const sorted = s
       ? rows.sort((a, b) => Number(score(a) !== 0) - Number(score(b) !== 0) || bought(b) - bought(a) || score(a) - score(b) || a.code.localeCompare(b.code)).slice(0, limit)
       : rows.slice(0, limit);
+    const extras = await productExtras(sorted.map((p) => p.id));
     const lw = words.map((w) => w.toLowerCase());
     const bal = await prisma.stockBalance.groupBy({
       by: ['productId'],
@@ -287,6 +289,8 @@ r.get(
           arabicName: p.arabicName,
           oemNumber: p.oemNumber,
           stockNumber: p.stockNumber,
+          altNo: extras.get(p.id)?.altNo ?? '',
+          vehicle: extras.get(p.id)?.vehicle ?? '',
           lastPurchaseAt: p.lastPurchaseAt,
           barcode: p.barcode,
           brand: p.brand?.name ?? null,

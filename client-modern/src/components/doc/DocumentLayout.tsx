@@ -172,6 +172,10 @@ function BuPicker({ hasNo }: { hasNo: boolean }) {
   const selected = useBuStore((s) => s.selectedBuId);
   const picked = useDocBuStore((s) => (tabId ? s.byTab[tabId] : undefined));
   const setDocBu = useDocBuStore((s) => s.setDocBu);
+  // the Business Unit the admin works in: chosen once, remembered across refreshes, used for every new document
+  const userId = useAuth(s => s.user?.id ?? 0);
+  const remembered = useBuStore(s => s.newDocBuUserId === userId ? s.newDocBuId : null);
+  const setRemembered = useBuStore((s) => s.setNewDocBuId);
   const show = isAdmin && selected === null && !!tabId && screenId.endsWith('-form') && !NO_BU_FORMS.has(screenId) && !hasNo;
   const active = useWorkspaceStore((s) => s.activeId === tabId);
   const [dismissed, setDismissed] = useState(false);
@@ -185,9 +189,21 @@ function BuPicker({ hasNo }: { hasNo: boolean }) {
   useEffect(() => {
     if (hasNo && tabId && picked) setDocBu(tabId, null);
   }, [hasNo, tabId, picked, setDocBu]);
+  // a new document starts in the remembered BU (no prompt); forget it if that BU no longer exists
+  const known = list.data ? list.data.some((b) => b.id === remembered) : true;
+  useEffect(() => {
+    if (!show || !tabId || !list.data) return;
+    if (remembered && !known) setRemembered(null, userId);
+    else if (remembered && !picked) setDocBu(tabId, remembered);
+  }, [show, tabId, list.data, remembered, known, picked, setDocBu, setRemembered, userId]);
+  const choose = (id: number | null) => {
+    if (!tabId) return;
+    setDocBu(tabId, id);
+    if (id) setRemembered(id, userId); // keep it for the next documents; switch any time with this field
+  };
   if (!show) return null;
-  // prompt as soon as a new document is opened (only in the visible tab); "Choose later" leaves the header field
-  const prompt = active && !picked && !dismissed;
+  // the prompt appears only when no BU has been chosen yet (never after a refresh or for the next document)
+  const prompt = active && !picked && (!remembered || !known) && !dismissed && !!list.data;
   return (
     <>
     <Modal
@@ -197,10 +213,10 @@ function BuPicker({ hasNo }: { hasNo: boolean }) {
       onClose={() => setDismissed(true)}
       footer={<Button onClick={() => setDismissed(true)}>Choose later</Button>}
     >
-      <p className="mb-3 text-[13px] text-ink-muted">The top bar is on All BUs, so this new document needs one Business Unit. Its journals and numbers follow it.</p>
+      <p className="mb-3 text-[13px] text-ink-muted">The top bar is on All BUs, so documents need one Business Unit. Your choice is remembered for the next documents; change it any time with the Business Unit field on a new document.</p>
       <div className="flex flex-wrap gap-2">
         {(list.data ?? []).map((b) => (
-          <Button key={b.id} variant="primary" onClick={() => tabId && setDocBu(tabId, b.id)}>
+          <Button key={b.id} variant="primary" onClick={() => choose(b.id)}>
             {b.code}
           </Button>
         ))}
@@ -208,7 +224,7 @@ function BuPicker({ hasNo }: { hasNo: boolean }) {
     </Modal>
     <label className={cn('flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[12px]', picked ? 'border-brand/40 bg-brand-soft' : 'border-warning/50 bg-warning-soft')} title="Business Unit of this new document (the top bar is on All BUs)">
       <span className="font-medium text-ink-muted">Business Unit</span>
-      <select className="cursor-pointer bg-transparent py-1 font-medium text-ink outline-none" value={picked ?? ''} onChange={(e) => tabId && setDocBu(tabId, e.target.value ? Number(e.target.value) : null)}>
+      <select className="cursor-pointer bg-transparent py-1 font-medium text-ink outline-none" value={picked ?? ''} onChange={(e) => choose(e.target.value ? Number(e.target.value) : null)}>
         <option value="">Select...</option>
         {(list.data ?? []).map((b) => (
           <option key={b.id} value={b.id}>{b.code}</option>

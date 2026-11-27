@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowDownToLine, Eraser, Send, Undo2, XCircle } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { DocSection, DocumentLayout, HeaderSection, NotesSection, TotalsSection } from '@/components/doc';
+import { useProductInfoColumns, DocSection, DocumentLayout, HeaderSection, NotesSection, TotalsSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button } from '@/components/ui';
 import { useOpenScreen } from '@/store/workspace';
 import { api, apiError } from '@/lib/api';
@@ -54,17 +54,17 @@ function SourcePicker({ onPick }: { onPick: (s: { invoiceId?: number; receiptId?
         <Button variant={mode === 'INV' ? 'primary' : 'default'} onClick={() => setMode('INV')}>Purchase Invoice (creates supplier credit note)</Button>
         <Button variant={mode === 'GRN' ? 'primary' : 'default'} onClick={() => setMode('GRN')}>Goods Receipt (not yet invoiced)</Button>
       </div>
-      <table className="w-full text-[12px]">
-        <thead><tr className="border-b border-app-border bg-app-head text-left text-[11px]"><th className="px-2 py-1">{mode === 'INV' ? 'Invoice No' : 'GRN No'}</th><th>Date</th><th>Supplier</th><th className="text-right">{mode === 'INV' ? 'Total (Base)' : 'Value'}</th><th>Status</th><th /></tr></thead>
+      <table className="w-full text-[13px]">
+        <thead><tr className="border-b border-line bg-surface-2 text-left text-xs"><th className="px-3 py-2">{mode === 'INV' ? 'Invoice No' : 'GRN No'}</th><th>Date</th><th>Supplier</th><th className="text-right">{mode === 'INV' ? 'Total (Base)' : 'Value'}</th><th>Status</th><th /></tr></thead>
         <tbody>
           {rows.map((r: any) => (
-            <tr key={r.id} className="border-b border-slate-100 hover:bg-brand-light/40">
-              <td className="px-2 py-1">{r.docNo}{r.supplierInvoiceNo ? <span className="text-slate-500"> ({r.supplierInvoiceNo})</span> : null}</td><td>{fmt.date(r.docDate)}</td><td>{r.supplier?.name}</td>
+            <tr key={r.id} className="border-b border-line hover:bg-brand-soft">
+              <td className="px-3 py-2">{r.docNo}{r.supplierInvoiceNo ? <span className="text-ink-muted"> ({r.supplierInvoiceNo})</span> : null}</td><td>{fmt.date(r.docDate)}</td><td>{r.supplier?.name}</td>
               <td className="text-right tabular-nums">{fmt.money(mode === 'INV' ? r.baseTotal : r.totalValue)}</td><td>{r.status}</td>
               <td className="text-right"><Button size="sm" variant="primary" onClick={() => onPick(mode === 'INV' ? { invoiceId: r.id } : { receiptId: r.id })}>Select</Button></td>
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-500">No documents available.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-ink-muted">No documents available.</td></tr>}
         </tbody>
       </table>
     </DocSection>
@@ -73,6 +73,7 @@ function SourcePicker({ onPick }: { onPick: (s: { invoiceId?: number; receiptId?
 
 /* ------------------------------------------------------------------ lines */
 function ReturnLines({ editable, showInvoiced }: { editable: boolean; showInvoiced: boolean }) {
+  const productInfoCount = useProductInfoColumns().length;
   const { register, control, setValue, formState } = useFormContext();
   const items = (useWatch({ control, name: 'items' }) as any[] | undefined) ?? [];
   const all = () => items.forEach((l, i) => l.maxQty !== undefined && setValue(`items.${i}.qty`, num(l.maxQty), { shouldDirty: true }));
@@ -81,12 +82,12 @@ function ReturnLines({ editable, showInvoiced }: { editable: boolean; showInvoic
   return (
     <DocSection title="Items to return (partial quantities allowed)" right={editable && hasMax ? <div className="flex gap-1"><Button size="sm" icon={ArrowDownToLine} onClick={all}>Return full qty</Button><Button size="sm" icon={Eraser} onClick={none}>Clear</Button></div> : undefined} bodyClassName="p-0">
       <div className="overflow-auto">
-        <table className="w-full border-separate border-spacing-0 text-[12px]">
+        <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
-            <tr className="h-7">
-              <th className="grid-th w-8 text-center">#</th><th className="grid-th">Product</th><th className="grid-th">Description</th><th className="grid-th">GRN</th>
+            <tr className="h-9">
+              <th className="grid-th w-8 text-center">#</th><th className="grid-th">Product</th><ProductInfoHeads /><th className="grid-th">Description</th><th className="grid-th">GRN</th>
               {hasMax && <th className="grid-th !text-right">Received</th>}{hasMax && showInvoiced && <th className="grid-th !text-right">Invoiced</th>}{hasMax && <th className="grid-th !text-right">Max Returnable</th>}
-              <th className="grid-th !text-right bg-brand-light">Return Qty</th><th className="grid-th !text-right">Rate</th><th className="grid-th !text-right">VAT %</th><th className="grid-th !text-right">Amount</th>
+              <th className="grid-th !text-right bg-brand-soft">Return Qty</th><th className="grid-th !text-right">Rate</th><th className="grid-th !text-right">VAT %</th><th className="grid-th !text-right">Amount</th>
             </tr>
           </thead>
           <tbody>
@@ -94,15 +95,15 @@ function ReturnLines({ editable, showInvoiced }: { editable: boolean; showInvoic
               const over = l.maxQty !== undefined && num(l.qty) > num(l.maxQty) + 0.0005;
               const net = num(l.qty) * num(l.rate);
               return (
-                <tr key={l.receiptItemId ?? i} className="odd:bg-white even:bg-slate-50/60">
-                  <td className="grid-td text-center text-slate-400">{i + 1}</td>
-                  <td className="grid-td">{l.product?.code}</td><td className="grid-td">{l.product?.name ?? l.description}</td><td className="grid-td">{l.receiptNo}</td>
+                <tr key={l.receiptItemId ?? i} className="h-9 odd:bg-surface even:bg-surface-2">
+                  <td className="grid-td text-center text-ink-faint">{i + 1}</td>
+                  <td className="grid-td">{l.product?.code}</td><ProductInfoCells line={l} /><td className="grid-td">{l.product?.name ?? l.description}</td><td className="grid-td">{l.receiptNo}</td>
                   {hasMax && <td className="grid-td text-right tabular-nums">{fmt.qty(l.qtyReceived)}</td>}
                   {hasMax && showInvoiced && <td className="grid-td text-right tabular-nums">{fmt.qty(l.invoicedQty)}</td>}
                   {hasMax && <td className="grid-td text-right tabular-nums">{fmt.qty(l.maxQty)}</td>}
-                  <td className="grid-td !p-0 bg-brand-light/40 text-right">
+                  <td className="grid-td !p-0 bg-brand-soft text-right">
                     {editable ? (
-                      <input type="number" step="any" min={0} className={cn('ctl !h-6 !rounded-none text-right font-semibold tabular-nums', over && '!border-red-500 text-red-700')} title={over ? `Maximum returnable: ${l.maxQty}` : undefined}
+                      <input type="number" step="any" min={0} className={cn('ctl !h-8 !rounded-none text-right font-semibold tabular-nums', over && '!border-danger text-danger')} title={over ? `Maximum returnable: ${l.maxQty}` : undefined}
                         {...register(`items.${i}.qty`, { setValueAs: (v) => (v === '' || v == null ? 0 : Number(v)) })} onFocus={(e) => e.target.select()} />
                     ) : <span className="block px-2 font-semibold tabular-nums">{fmt.qty(l.qty)}</span>}
                   </td>
@@ -111,11 +112,11 @@ function ReturnLines({ editable, showInvoiced }: { editable: boolean; showInvoic
                 </tr>
               );
             })}
-            {items.length === 0 && <tr><td colSpan={11} className="p-4 text-center text-slate-400">No lines</td></tr>}
+            {items.length === 0 && <tr><td colSpan={11 + productInfoCount} className="p-4 text-center text-ink-faint">No lines</td></tr>}
           </tbody>
         </table>
       </div>
-      {(formState.errors.items as any)?.message && <div className="p-1 text-[11px] text-red-600">{(formState.errors.items as any).message}</div>}
+      {(formState.errors.items as any)?.message && <div className="p-1 text-xs text-danger">{(formState.errors.items as any).message}</div>}
     </DocSection>
   );
 }
@@ -186,7 +187,7 @@ function PurchaseReturnForm({ params, tabId }: ScreenProps) {
         actions={<StdActions ctl={ctl} module="purchase_return" transitions={transitions} onSave={onSave} />}
       >
         <ServerError message={ctl.err} />
-        {status === 'POSTED' && <div className="rounded border border-teal-300 bg-teal-50 px-3 py-1.5 text-[12px] text-teal-800">Posted - stock reduced{r?.creditNote ? `; supplier credit note ${r.creditNote.noteNo} for ${fmt.money(r.creditNote.total)}` : ' (goods not yet invoiced: GRNI reversed)'}.</div>}
+        {status === 'POSTED' && <div className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-1.5 text-[13px] text-teal-800">Posted - stock reduced{r?.creditNote ? `; supplier credit note ${r.creditNote.noteNo} for ${fmt.money(r.creditNote.total)}` : ' (goods not yet invoiced: GRNI reversed)'}.</div>}
         <HeaderSection title="Return Information">
           <ReadField label="Return Number" value={r?.docNo ?? '(auto)'} />
           <FDate name="docDate" label="Return Date" required disabled={!editable} />

@@ -69,6 +69,7 @@ const toValues = (d: AnyRec, copy = false): FV =>
     items: (d.items ?? []).map((i: AnyRec) => ({
       productId: i.productId ?? undefined,
       productCode: i.product?.code ?? '',
+      product: i.product,
       description: i.description ?? i.product?.name ?? '',
       qty: num(i.qty),
       remarks: i.remarks ?? '',

@@ -7,7 +7,7 @@ import { Anchor, Plus, RefreshCw, Send, Trash2, XCircle } from 'lucide-react';
 import { Controller, useFieldArray } from 'react-hook-form';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { DocSection, DocumentLayout, HeaderSection, NotesSection } from '@/components/doc';
+import { DocSection, DocumentLayout, HeaderSection, NotesSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button } from '@/components/ui';
 import { useOpenScreen } from '@/store/workspace';
 import { api, apiError } from '@/lib/api';
@@ -198,13 +198,14 @@ function LandedCostForm({ params, tabId }: ScreenProps) {
               </div>
               <div className="overflow-auto">
                 <table className="w-full border-separate border-spacing-0 text-[13px]">
-                  <thead><tr className="h-9"><th className="grid-th w-8 text-center">#</th><th className="grid-th">Product</th><th className="grid-th !text-right">Qty</th><th className="grid-th !text-right">Product Cost</th><th className="grid-th !text-right">Allocated Cost</th><th className="grid-th !text-right">Old Unit Cost</th><th className="grid-th !text-right bg-brand-soft">New Unit Cost</th><th className="grid-th !text-right">Increase</th></tr></thead>
+                  <thead><tr className="h-9"><th className="grid-th w-8 text-center">#</th><th className="grid-th">Product</th><ProductInfoHeads /><th className="grid-th !text-right">Qty</th><th className="grid-th !text-right">Product Cost</th><th className="grid-th !text-right">Allocated Cost</th><th className="grid-th !text-right">Old Unit Cost</th><th className="grid-th !text-right bg-brand-soft">New Unit Cost</th><th className="grid-th !text-right">Increase</th></tr></thead>
                   <tbody>
                     {lines.map((l, i) => {
                       const inc = num(l.oldUnitCost) ? ((num(l.newUnitCost) - num(l.oldUnitCost)) / num(l.oldUnitCost)) * 100 : 0;
                       return (
                         <tr key={l.receiptItemId ?? i} className="h-9 odd:bg-surface even:bg-surface-2">
                           <td className="grid-td text-center text-ink-faint">{i + 1}</td><td className="grid-td">{l.product?.code} <span className="text-ink-muted">{l.product?.name}</span></td>
+                          <ProductInfoCells line={l} />
                           <td className="grid-td text-right tabular-nums">{fmt.qty(l.qty)}</td><td className="grid-td text-right tabular-nums">{fmt.money(l.baseCost)}</td><td className="grid-td text-right tabular-nums">{fmt.money(l.allocated)}</td>
                           <td className="grid-td text-right tabular-nums">{fmt.num(l.oldUnitCost, 4)}</td><td className={cn('grid-td bg-brand-soft text-right font-semibold tabular-nums')}>{fmt.num(l.newUnitCost, 4)}</td>
                           <td className="grid-td text-right tabular-nums text-warning">+{fmt.num(inc, 1)}%</td>

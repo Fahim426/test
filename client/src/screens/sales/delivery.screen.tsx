@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Ban, FilePlus2, Printer, Save, Send, Trash2, Truck } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection } from '@/components/doc';
+import { useProductInfoColumns, ProductInfoHeads, ProductInfoCells, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection } from '@/components/doc';
 import { Button, DateInput, EmptyState, Field, Input, NumberInput, StatusBadge, Textarea } from '@/components/ui';
 import { useDocument } from '@/hooks/useDocument';
 import { usePermission } from '@/store/auth';
@@ -95,6 +95,7 @@ const DeliveryList = makeSalesList<AnyRec>({
 });
 
 function DeliveryForm({ params, tabId }: ScreenProps) {
+  const productInfoCount = useProductInfoColumns().length;
   const doc = useDocument<AnyRec>(URL, params.id, { tabId });
   const can = usePermission();
   const ws = useWorkspace();
@@ -260,7 +261,7 @@ function DeliveryForm({ params, tabId }: ScreenProps) {
                 <tr className="h-7">
                   <th className="grid-th w-8">#</th>
                   <th className="grid-th">Product</th>
-                  <th className="grid-th">OEM</th>
+                  <ProductInfoHeads />
                   <th className="grid-th">Description</th>
                   <th className="grid-th !text-right">Ordered</th>
                   {status === 'DRAFT' && <th className="grid-th !text-right">On hand</th>}
@@ -278,7 +279,7 @@ function DeliveryForm({ params, tabId }: ScreenProps) {
                     <tr key={i.id} className={cn('h-7', short ? 'bg-red-50' : 'odd:bg-white even:bg-slate-50/60')}>
                       <td className="grid-td text-center text-slate-400">{n + 1}</td>
                       <td className="grid-td font-medium">{i.product?.code}</td>
-                      <td className="grid-td">{i.product?.oemNumber}</td>
+                      <ProductInfoCells line={i} />
                       <td className="grid-td">{i.product?.name}</td>
                       <td className="grid-td text-right tabular-nums">{fmt.qty(i.orderedQty)}</td>
                       {status === 'DRAFT' && <td className={cn('grid-td text-right tabular-nums', short && 'font-bold text-red-600')}>{onHand === undefined ? '' : fmt.qty(onHand)}</td>}
@@ -293,7 +294,7 @@ function DeliveryForm({ params, tabId }: ScreenProps) {
               </tbody>
               <tfoot>
                 <tr className="h-7">
-                  <td colSpan={status === 'DRAFT' ? 6 : 5} className="border-t-2 border-app-border bg-app-head px-2 font-semibold">Total</td>
+                  <td colSpan={(status === 'DRAFT' ? 5 : 4) + productInfoCount} className="border-t-2 border-app-border bg-app-head px-2 font-semibold">Total</td>
                   <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + num(qty[i.id]), 0))}</td>
                   <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + num(i.invoicedQty), 0))}</td>
                   {posted && <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.money(doc.data?.totalCost)}</td>}

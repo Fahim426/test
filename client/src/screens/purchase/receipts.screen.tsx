@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Anchor, ArrowDownToLine, PackagePlus, Receipt, Send, Undo2, XCircle, Eraser } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column, RowAction } from '@/components/DataTable';
-import { DocAction, DocSection, DocumentLayout, HeaderSection, NotesSection } from '@/components/doc';
+import { useProductInfoColumns, DocAction, DocSection, DocumentLayout, HeaderSection, NotesSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button } from '@/components/ui';
 import { useOpenScreen } from '@/store/workspace';
 import { usePermission } from '@/store/auth';
@@ -72,17 +72,17 @@ function SourcePicker({ onPick }: { onPick: (s: { orderId: number; shipmentId?: 
         <Button variant={mode === 'LOCAL' ? 'primary' : 'default'} onClick={() => setMode('LOCAL')}>Local Purchase Order</Button>
         <Button variant={mode === 'IMPORT' ? 'primary' : 'default'} onClick={() => setMode('IMPORT')}>Import Shipment (arrived)</Button>
       </div>
-      <table className="w-full text-[12px]">
+      <table className="w-full text-[13px]">
         <thead>
-          <tr className="border-b border-app-border bg-app-head text-left text-[11px]">
-            <th className="px-2 py-1">{mode === 'LOCAL' ? 'PO No' : 'Shipment'}</th><th>{mode === 'IMPORT' ? 'Import PO' : 'Date'}</th><th>Supplier</th>
+          <tr className="border-b border-line bg-surface-2 text-left text-xs">
+            <th className="px-3 py-2">{mode === 'LOCAL' ? 'PO No' : 'Shipment'}</th><th>{mode === 'IMPORT' ? 'Import PO' : 'Date'}</th><th>Supplier</th>
             <th className="text-right">{mode === 'LOCAL' ? 'Pending Qty' : 'Pending Qty'}</th><th>Status</th><th />
           </tr>
         </thead>
         <tbody>
           {rows.map((r: any) => (
-            <tr key={r.id} className="border-b border-slate-100 hover:bg-brand-light/40">
-              <td className="px-2 py-1">{mode === 'LOCAL' ? r.docNo : r.shipmentNo}</td>
+            <tr key={r.id} className="border-b border-line hover:bg-brand-soft">
+              <td className="px-3 py-2">{mode === 'LOCAL' ? r.docNo : r.shipmentNo}</td>
               <td>{mode === 'LOCAL' ? fmt.date(r.docDate) : r.order?.docNo}</td>
               <td>{mode === 'LOCAL' ? r.supplier?.name : r.order?.supplier?.name}</td>
               <td className="text-right tabular-nums">{fmt.qty(r.pendingQty)}</td>
@@ -90,7 +90,7 @@ function SourcePicker({ onPick }: { onPick: (s: { orderId: number; shipmentId?: 
               <td className="text-right"><Button size="sm" variant="primary" disabled={mode === 'IMPORT' && !(r.pendingQty > 0)} onClick={() => onPick(mode === 'LOCAL' ? { orderId: r.id } : { orderId: r.orderId, shipmentId: r.id })}>Receive</Button></td>
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-500">{mode === 'LOCAL' ? 'No approved purchase orders with pending quantity.' : 'No arrived shipments waiting to be received.'}</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-ink-muted">{mode === 'LOCAL' ? 'No approved purchase orders with pending quantity.' : 'No arrived shipments waiting to be received.'}</td></tr>}
         </tbody>
       </table>
     </DocSection>
@@ -99,6 +99,7 @@ function SourcePicker({ onPick }: { onPick: (s: { orderId: number; shipmentId?: 
 
 /* ------------------------------------------------------------------ lines table */
 function GrnLines({ editable }: { editable: boolean }) {
+  const productInfoCount = useProductInfoColumns().length;
   const { register, control, setValue, formState } = useFormContext();
   const items = (useWatch({ control, name: 'items' }) as any[] | undefined) ?? [];
   const tot = items.reduce((a, l) => ({ ordered: a.ordered + num(l.orderedQty), prev: a.prev + num(l.previouslyReceived), cur: a.cur + num(l.qty), pending: a.pending + Math.max(0, num(l.orderedQty) - num(l.previouslyReceived) - num(l.qty)), value: a.value + num(l.qty) * num(l.unitCost) }), { ordered: 0, prev: 0, cur: 0, pending: 0, value: 0 });
@@ -111,11 +112,11 @@ function GrnLines({ editable }: { editable: boolean }) {
       bodyClassName="p-0"
     >
       <div className="overflow-auto">
-        <table className="w-full border-separate border-spacing-0 text-[12px]">
+        <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
-            <tr className="h-7">
-              <th className="grid-th w-8 text-center">#</th><th className="grid-th w-[120px]">Product</th><th className="grid-th w-[120px]">OEM</th><th className="grid-th">Description</th>
-              <th className="grid-th !text-right">Ordered Qty</th><th className="grid-th !text-right">Previously Received</th><th className="grid-th !text-right bg-brand-light">Current Receipt</th>
+            <tr className="h-9">
+              <th className="grid-th w-8 text-center">#</th><th className="grid-th w-[120px]">Product</th><ProductInfoHeads /><th className="grid-th">Description</th>
+              <th className="grid-th !text-right">Ordered Qty</th><th className="grid-th !text-right">Previously Received</th><th className="grid-th !text-right bg-brand-soft">Current Receipt</th>
               <th className="grid-th !text-right">Pending Qty</th><th className="grid-th !text-right">Unit Cost</th><th className="grid-th !text-right">Value</th>
             </tr>
           </thead>
@@ -124,47 +125,47 @@ function GrnLines({ editable }: { editable: boolean }) {
               const pend = Math.max(0, num(l.orderedQty) - num(l.previouslyReceived) - num(l.qty));
               const over = l.maxQty !== undefined && num(l.qty) > num(l.maxQty) + 0.0005;
               return (
-                <tr key={l.orderItemId ?? l.id ?? i} className="odd:bg-white even:bg-slate-50/60">
-                  <td className="grid-td text-center text-slate-400">{i + 1}</td>
+                <tr key={l.orderItemId ?? l.id ?? i} className="h-9 odd:bg-surface even:bg-surface-2">
+                  <td className="grid-td text-center text-ink-faint">{i + 1}</td>
                   <td className="grid-td">{l.product?.code}</td>
-                  <td className="grid-td">{l.product?.oemNumber ?? l.oemNumber}</td>
+                  <ProductInfoCells line={l} />
                   <td className="grid-td">{l.product?.name ?? l.description}</td>
                   <td className="grid-td text-right tabular-nums">{fmt.qty(l.orderedQty)}</td>
                   <td className="grid-td text-right tabular-nums">{fmt.qty(l.previouslyReceived)}</td>
-                  <td className="grid-td !p-0 bg-brand-light/40 text-right">
+                  <td className="grid-td !p-0 bg-brand-soft text-right">
                     {editable ? (
                       <input
                         type="number" step="any" min={0} title={over ? `Maximum receivable: ${l.maxQty}` : undefined}
-                        className={cn('ctl !h-6 !rounded-none text-right tabular-nums font-semibold', over && '!border-red-500 text-red-700')}
+                        className={cn('ctl !h-8 !rounded-none text-right tabular-nums font-semibold', over && '!border-danger text-danger')}
                         {...register(`items.${i}.qty`, { setValueAs: (v) => (v === '' || v == null ? 0 : Number(v)) })} onFocus={(e) => e.target.select()}
                       />
                     ) : (
                       <span className="block px-2 font-semibold tabular-nums">{fmt.qty(l.qty)}</span>
                     )}
                   </td>
-                  <td className={cn('grid-td text-right tabular-nums', pend > 0 ? 'text-amber-700' : 'text-green-700')}>{fmt.qty(pend)}</td>
+                  <td className={cn('grid-td text-right tabular-nums', pend > 0 ? 'text-warning' : 'text-success')}>{fmt.qty(pend)}</td>
                   <td className="grid-td text-right tabular-nums">{fmt.money(l.unitCost)}</td>
                   <td className="grid-td text-right tabular-nums">{fmt.money(num(l.qty) * num(l.unitCost))}</td>
                 </tr>
               );
             })}
-            {items.length === 0 && <tr><td colSpan={10} className="p-4 text-center text-slate-400">No lines</td></tr>}
+            {items.length === 0 && <tr><td colSpan={9 + productInfoCount} className="p-4 text-center text-ink-faint">No lines</td></tr>}
           </tbody>
           <tfoot>
-            <tr className="h-7 bg-app-head font-semibold">
-              <td className="border-t-2 border-app-border bg-app-head" colSpan={4}><span className="px-2">Total</span></td>
-              <td className="border-t-2 border-app-border bg-app-head px-2 text-right tabular-nums">{fmt.qty(tot.ordered)}</td>
-              <td className="border-t-2 border-app-border bg-app-head px-2 text-right tabular-nums">{fmt.qty(tot.prev)}</td>
-              <td className="border-t-2 border-app-border bg-app-head px-2 text-right tabular-nums">{fmt.qty(tot.cur)}</td>
-              <td className="border-t-2 border-app-border bg-app-head px-2 text-right tabular-nums">{fmt.qty(tot.pending)}</td>
-              <td className="border-t-2 border-app-border bg-app-head" />
-              <td className="border-t-2 border-app-border bg-app-head px-2 text-right tabular-nums">{fmt.money(tot.value)}</td>
+            <tr className="h-9 bg-surface-2 font-semibold">
+              <td className="border-t-2 border-line bg-surface-2" colSpan={3 + productInfoCount}><span className="px-2">Total</span></td>
+              <td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.qty(tot.ordered)}</td>
+              <td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.qty(tot.prev)}</td>
+              <td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.qty(tot.cur)}</td>
+              <td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.qty(tot.pending)}</td>
+              <td className="border-t-2 border-line bg-surface-2" />
+              <td className="border-t-2 border-line bg-surface-2 px-3 text-right tabular-nums">{fmt.money(tot.value)}</td>
             </tr>
           </tfoot>
         </table>
       </div>
-      {(formState.errors.items as any)?.message && <div className="p-1 text-[11px] text-red-600">{(formState.errors.items as any).message}</div>}
-      <div className="border-t border-app-border bg-app-head px-2 py-1 text-[10px] text-slate-500">
+      {(formState.errors.items as any)?.message && <div className="p-1 text-xs text-danger">{(formState.errors.items as any).message}</div>}
+      <div className="border-t border-line bg-surface-2 px-2 py-1 text-xs text-ink-muted">
         Quantities come from the purchase order - only enter what physically arrived. Posting increases inventory and creates the stock transaction automatically.
       </div>
     </DocSection>
@@ -259,7 +260,7 @@ function GoodsReceiptForm({ params, tabId }: ScreenProps) {
         }
       >
         <ServerError message={ctl.err} />
-        {status === 'POSTED' && <div className="rounded border border-teal-300 bg-teal-50 px-3 py-1.5 text-[12px] text-teal-800">Posted - inventory increased{g?.invoiced ? ' and fully invoiced' : ''}. Total value {fmt.money(g?.totalValue)}.</div>}
+        {status === 'POSTED' && <div className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-1.5 text-[13px] text-teal-800">Posted - inventory increased{g?.invoiced ? ' and fully invoiced' : ''}. Total value {fmt.money(g?.totalValue)}.</div>}
         <HeaderSection title="GRN Information">
           <ReadField label="GRN Number" value={g?.docNo ?? '(auto)'} />
           <FDate name="docDate" label="Receipt Date" required disabled={!editable} />

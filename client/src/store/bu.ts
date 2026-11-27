@@ -8,11 +8,14 @@ import { persist } from 'zustand/middleware';
  */
 interface BuState {
   selectedBuId: number | null;
+  newDocBuId: number | null;
+  newDocBuUserId: number | null;
+  setNewDocBuId: (id: number | null, userId: number) => void;
   setSelectedBuId: (id: number | null) => void;
 }
 export const useBuStore = create<BuState>()(
   persist(
-    (set) => ({ selectedBuId: null, setSelectedBuId: (selectedBuId) => set({ selectedBuId }) }),
+    (set) => ({ selectedBuId: null, setSelectedBuId: (selectedBuId) => set({ selectedBuId }), newDocBuId: null, newDocBuUserId: null, setNewDocBuId: (newDocBuId, newDocBuUserId) => set({ newDocBuId, newDocBuUserId }) }),
     { name: 'ss-bu' },
   ),
 );

@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Ban, ClipboardCheck, PackageCheck, Save, Send, Trash2, Undo2 } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection } from '@/components/doc';
+import { useProductInfoColumns, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button, DateInput, EmptyState, Field, Input, NumberInput, Select, StatusBadge, Textarea } from '@/components/ui';
 import { useDocument } from '@/hooks/useDocument';
 import { usePermission } from '@/store/auth';
@@ -75,16 +75,16 @@ const STEP_LABEL: Record<string, string> = { DRAFT: 'Return Requested', RECEIVED
 function Stepper({ status }: { status: string }) {
   const cur = STEPS.indexOf(status);
   return (
-    <div className="flex flex-wrap items-center gap-1 text-[12px]">
+    <div className="flex flex-wrap items-center gap-1.5 text-[13px]">
       {STEPS.map((s, i) => (
         <div key={s} className="flex items-center gap-1">
-          <span className={cn('rounded border px-2 py-0.5', i < cur || status === 'POSTED' ? 'border-green-400 bg-green-50 text-green-800' : i === cur ? 'border-brand bg-brand-light font-semibold text-brand' : 'border-app-border bg-white text-slate-400')}>
+          <span className={cn('rounded-full border px-3 py-1 text-xs font-medium', i < cur || status === 'POSTED' ? 'border-success bg-success-soft text-success' : i === cur ? 'border-brand bg-brand text-white shadow-card' : 'border-line bg-surface text-ink-faint')}>
             {i + 1}. {STEP_LABEL[s]}
           </span>
-          {i < STEPS.length - 1 && <span className="text-slate-300">&gt;</span>}
+          {i < STEPS.length - 1 && <span className="h-0.5 w-4 rounded bg-line-strong" />}
         </div>
       ))}
-      {status === 'CANCELLED' && <span className="ml-2 rounded border border-red-300 bg-red-50 px-2 py-0.5 text-red-700">Cancelled</span>}
+      {status === 'CANCELLED' && <span className="ml-2 rounded-full border border-danger bg-danger-soft px-3 py-1 text-xs font-medium text-danger">Cancelled</span>}
     </div>
   );
 }
@@ -97,6 +97,7 @@ interface Ln {
 }
 
 function ReturnForm({ params, tabId }: ScreenProps) {
+  const productInfoCount = useProductInfoColumns().length;
   const doc = useDocument<AnyRec>(URL, params.id, { tabId });
   const can = usePermission();
   const ws = useWorkspace();
@@ -238,6 +239,7 @@ function ReturnForm({ params, tabId }: ScreenProps) {
           </>
         }
       >
+        <DocumentFlow docType={TYPE} docId={doc.id} />
         <Stepper status={status} />
         {status === 'DRAFT' && <InfoBanner tone="blue">Step 1: set the quantity the customer is returning and save. Step 2: when the goods arrive press <b>Receive Goods</b> (adjust the received quantity if different).</InfoBanner>}
         {inspecting && <InfoBanner tone="blue">Step 3: inspect the received goods. For every line split the received quantity into <b>resalable</b> (back to stock) and <b>damaged</b> (written off), then save the inspection.</InfoBanner>}
@@ -262,13 +264,13 @@ function ReturnForm({ params, tabId }: ScreenProps) {
         </HeaderSection>
 
         <DocSection title="Return Items">
-          <div className="overflow-auto border border-app-border">
-            <table className="w-full border-separate border-spacing-0 text-[12px]">
+          <div className="overflow-auto border border-line">
+            <table className="w-full border-separate border-spacing-0 text-[13px]">
               <thead>
-                <tr className="h-7">
+                <tr className="h-9">
                   <th className="grid-th w-8">#</th>
                   <th className="grid-th">Product</th>
-                  <th className="grid-th">OEM</th>
+                  <ProductInfoHeads />
                   <th className="grid-th !text-right">Invoiced</th>
                   <th className="grid-th !text-right w-[100px]">Return Qty</th>
                   <th className="grid-th !text-right w-[100px]">Received</th>
@@ -284,10 +286,10 @@ function ReturnForm({ params, tabId }: ScreenProps) {
                   const l = ln[i.id] ?? { qty: num(i.qty), received: 0, resalable: 0, damaged: 0 };
                   const inspBad = inspecting && Math.abs(l.resalable + l.damaged - num(i.receivedQty)) > 0.0005;
                   return (
-                    <tr key={i.id} className={cn('h-7 odd:bg-white even:bg-slate-50/60', inspBad && '!bg-red-50')}>
-                      <td className="grid-td text-center text-slate-400">{n + 1}</td>
+                    <tr key={i.id} className={cn('h-9 odd:bg-surface even:bg-surface-2', inspBad && '!bg-danger-soft')}>
+                      <td className="grid-td text-center text-ink-faint">{n + 1}</td>
                       <td className="grid-td font-medium">{i.product?.code}</td>
-                      <td className="grid-td">{i.product?.oemNumber}</td>
+                      <ProductInfoCells line={i} />
                       <td className="grid-td text-right tabular-nums">{fmt.qty(i.invoicedQty)}</td>
                       <td className="grid-td"><NumberInput min={0} max={num(i.invoicedQty)} value={l.qty} disabled={!editable} onFocus={(e) => e.target.select()} onChange={(e) => set(i.id, { qty: Number(e.target.value) })} /></td>
                       <td className="grid-td">
@@ -308,7 +310,7 @@ function ReturnForm({ params, tabId }: ScreenProps) {
                         {inspecting ? (
                           <NumberInput min={0} max={num(i.receivedQty)} value={l.damaged} onFocus={(e) => e.target.select()} onChange={(e) => { const v = Math.min(num(i.receivedQty), Number(e.target.value)); set(i.id, { damaged: v, resalable: Math.round((num(i.receivedQty) - v) * 1000) / 1000 }); }} />
                         ) : (
-                          <span className={cn('block px-2 text-right tabular-nums', num(i.damagedQty) > 0 && 'font-semibold text-red-600')}>{status === 'POSTED' ? fmt.qty(i.damagedQty) : ''}</span>
+                          <span className={cn('block px-2 text-right tabular-nums', num(i.damagedQty) > 0 && 'font-semibold text-danger')}>{status === 'POSTED' ? fmt.qty(i.damagedQty) : ''}</span>
                         )}
                       </td>
                       <td className="grid-td text-right tabular-nums">{fmt.money(i.rate)}</td>
@@ -319,27 +321,26 @@ function ReturnForm({ params, tabId }: ScreenProps) {
                 })}
               </tbody>
               <tfoot>
-                <tr className="h-7">
-                  <td colSpan={4} className="border-t-2 border-app-border bg-app-head px-2 font-semibold">Total</td>
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + num(ln[i.id]?.qty), 0))}</td>
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + (status === 'DRAFT' ? num(ln[i.id]?.received) : num(i.receivedQty)), 0))}</td>
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + (inspecting ? num(ln[i.id]?.resalable) : num(i.resalableQty)), 0))}</td>
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + (inspecting ? num(ln[i.id]?.damaged) : num(i.damagedQty)), 0))}</td>
-                  <td className="border-t-2 border-app-border bg-app-head" />
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-semibold tabular-nums">{fmt.money(doc.data?.vatAmount)}</td>
-                  <td className="border-t-2 border-app-border bg-app-head px-2 text-right font-bold tabular-nums text-brand">{fmt.money(doc.data?.total)}</td>
+                <tr className="h-9">
+                  <td colSpan={3 + productInfoCount} className="border-t-2 border-line bg-surface-2 px-3 font-semibold">Total</td>
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + num(ln[i.id]?.qty), 0))}</td>
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + (status === 'DRAFT' ? num(ln[i.id]?.received) : num(i.receivedQty)), 0))}</td>
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + (inspecting ? num(ln[i.id]?.resalable) : num(i.resalableQty)), 0))}</td>
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + (inspecting ? num(ln[i.id]?.damaged) : num(i.damagedQty)), 0))}</td>
+                  <td className="border-t-2 border-line bg-surface-2" />
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.money(doc.data?.vatAmount)}</td>
+                  <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-bold tabular-nums text-brand">{fmt.money(doc.data?.total)}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">Credit amounts follow the original invoice price (net + VAT) for the quantity returned and are finalised on the received quantity when the return is posted.</div>
+          <div className="mt-1 text-xs text-ink-muted">Credit amounts follow the original invoice price (net + VAT) for the quantity returned and are finalised on the received quantity when the return is posted.</div>
         </DocSection>
 
         <DocSection title="Notes">
           <Field label="Remarks"><Textarea rows={2} value={head.remarks} disabled={!editable} onChange={(e) => setHead({ ...head, remarks: e.target.value })} /></Field>
         </DocSection>
         <AttachmentsSection docType={TYPE} docId={doc.id} />
-        <DocumentFlow docType={TYPE} docId={doc.id} />
         <AuditSection doc={doc.data} />
       </DocumentLayout>
     </>

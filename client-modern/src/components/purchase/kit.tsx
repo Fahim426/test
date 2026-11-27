@@ -216,17 +216,20 @@ export function PickModal({
 
 /* ------------------------------------------------------------------ PDF / print */
 export async function fetchPdf(docType: string, id: number | string, download: boolean) {
+  const preview = download ? null : window.open('about:blank', '_blank');
   try {
     const r = await api.get(`/documents/${docType}/${id}/pdf`, { responseType: 'blob', params: download ? { download: 1 } : undefined });
     const blob = r.data as Blob;
     if (download) saveBlob(blob, `${docType}-${id}.pdf`);
     else {
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      if (preview && !preview.closed) preview.location.replace(url);
+      else toast.warning('Allow pop-ups for this site, then click Print again');
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     }
   } catch (e) {
     // error bodies arrive as blobs
+    preview?.close();
     const b = (e as any)?.response?.data;
     if (b instanceof Blob) {
       try {

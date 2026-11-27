@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Ban, ClipboardCheck, PackageCheck, Save, Send, Trash2, Undo2 } from 'lucide-react';
 import type { ScreenDef, ScreenProps } from '@/screens/types';
 import { Column } from '@/components/DataTable';
-import { AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection } from '@/components/doc';
+import { useProductInfoColumns, AttachmentsSection, AuditSection, DocAction, DocActionSep, DocumentFlow, DocumentLayout, DocSection, HeaderSection, ProductInfoCells, ProductInfoHeads } from '@/components/doc';
 import { Button, DateInput, EmptyState, Field, Input, NumberInput, Select, StatusBadge, Textarea } from '@/components/ui';
 import { useDocument } from '@/hooks/useDocument';
 import { usePermission } from '@/store/auth';
@@ -97,6 +97,7 @@ interface Ln {
 }
 
 function ReturnForm({ params, tabId }: ScreenProps) {
+  const productInfoCount = useProductInfoColumns().length;
   const doc = useDocument<AnyRec>(URL, params.id, { tabId });
   const can = usePermission();
   const ws = useWorkspace();
@@ -269,7 +270,7 @@ function ReturnForm({ params, tabId }: ScreenProps) {
                 <tr className="h-9">
                   <th className="grid-th w-8">#</th>
                   <th className="grid-th">Product</th>
-                  <th className="grid-th">OEM</th>
+                  <ProductInfoHeads />
                   <th className="grid-th !text-right">Invoiced</th>
                   <th className="grid-th !text-right w-[100px]">Return Qty</th>
                   <th className="grid-th !text-right w-[100px]">Received</th>
@@ -288,7 +289,7 @@ function ReturnForm({ params, tabId }: ScreenProps) {
                     <tr key={i.id} className={cn('h-9 odd:bg-surface even:bg-surface-2', inspBad && '!bg-danger-soft')}>
                       <td className="grid-td text-center text-ink-faint">{n + 1}</td>
                       <td className="grid-td font-medium">{i.product?.code}</td>
-                      <td className="grid-td">{i.product?.oemNumber}</td>
+                      <ProductInfoCells line={i} />
                       <td className="grid-td text-right tabular-nums">{fmt.qty(i.invoicedQty)}</td>
                       <td className="grid-td"><NumberInput min={0} max={num(i.invoicedQty)} value={l.qty} disabled={!editable} onFocus={(e) => e.target.select()} onChange={(e) => set(i.id, { qty: Number(e.target.value) })} /></td>
                       <td className="grid-td">
@@ -321,7 +322,7 @@ function ReturnForm({ params, tabId }: ScreenProps) {
               </tbody>
               <tfoot>
                 <tr className="h-9">
-                  <td colSpan={4} className="border-t-2 border-line bg-surface-2 px-3 font-semibold">Total</td>
+                  <td colSpan={3 + productInfoCount} className="border-t-2 border-line bg-surface-2 px-3 font-semibold">Total</td>
                   <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + num(ln[i.id]?.qty), 0))}</td>
                   <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + (status === 'DRAFT' ? num(ln[i.id]?.received) : num(i.receivedQty)), 0))}</td>
                   <td className="border-t-2 border-line bg-surface-2 px-3 text-right font-semibold tabular-nums">{fmt.qty(items.reduce((s, i) => s + (inspecting ? num(ln[i.id]?.resalable) : num(i.resalableQty)), 0))}</td>
