@@ -34,6 +34,7 @@ export function makeTour(steps: DriveStep[], label: string, extraConfig: Config 
   active?.destroy();
   let restorePresentation = () => {};
   let disposeResize = () => {};
+  let presentationMinimized = false;
   let preferredPosition: { left: number; top: number } | undefined;
   let preferredSize: { width: number; height: number } | undefined;
   const tour = driver({
@@ -97,7 +98,18 @@ export function makeTour(steps: DriveStep[], label: string, extraConfig: Config 
       leave.textContent = 'Exit';
       leave.setAttribute('aria-label', 'Exit minimized tour');
       leave.onclick = () => opts.driver.destroy();
-      miniBar.append(caption, resume, leave);
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.textContent = 'Back';
+      back.disabled = index === 0;
+      back.setAttribute('aria-label', 'Previous tour step');
+      back.onclick = () => popover.previousButton.click();
+      const next = document.createElement('button');
+      next.type = 'button';
+      next.textContent = index === total - 1 ? 'Finish' : 'Next →';
+      next.setAttribute('aria-label', 'Next tour step');
+      next.onclick = () => popover.nextButton.click();
+      miniBar.append(caption, back, next, resume, leave);
       popover.wrapper.append(miniBar);
       let minimized = false;
       const keyboard = opts.driver.getConfig().allowKeyboardControl;
@@ -108,6 +120,7 @@ export function makeTour(steps: DriveStep[], label: string, extraConfig: Config 
         minimized = false;
       };
       minimise.onclick = () => {
+        presentationMinimized = true;
         minimized = true;
         opts.driver.setConfig({ ...opts.driver.getConfig(), allowKeyboardControl: false });
         document.body.classList.add('ss-tour-minimized');
@@ -210,10 +223,11 @@ export function makeTour(steps: DriveStep[], label: string, extraConfig: Config 
         wrapper.append(handle);
         connect(handle, direction);
       }
-      resume.onclick = () => { restorePresentation(); applyGeometry(); minimise.focus(); };
+      resume.onclick = () => { presentationMinimized = false; restorePresentation(); applyGeometry(); minimise.focus(); };
       resetSize.onclick = () => { preferredSize = undefined; preferredPosition = undefined; applyGeometry(); };
       window.addEventListener('resize', applyGeometry, { signal: events.signal });
       applyGeometry();
+      if (presentationMinimized) minimise.click();
       disposeResize = () => { events.abort(); cancelAnimationFrame(frame); drag = undefined; };
 
     },

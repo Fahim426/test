@@ -72,9 +72,12 @@ export async function startClientDemo() {
       return Promise.reject(new Error('Client Demo is read-only. Exit the demo before saving or changing records.'));
     return cfg;
   });
+  document.body.classList.add('ss-client-demo-active');
+  const interaction = { allowScroll: true, allowPageInteraction: true, disableActiveInteraction: false, allowKeyboardControl: false, overlayClickBehavior: 'none' as const };
   const cleanup = () => {
     if (ended) return;
     ended = true;
+    document.body.classList.remove('ss-client-demo-active');
     ticket++;
     controller.abort();
     unsubscribe();
@@ -126,7 +129,7 @@ export async function startClientDemo() {
       },
     ],
     'Client Demo',
-    { popoverClass: 'ss-tour ss-client-demo', disableButtons: ['next'], onDestroyed: destroy },
+    { ...interaction, popoverClass: 'ss-tour ss-client-demo', disableButtons: ['next'], onDestroyed: destroy },
   );
   const get = async (path: string, params?: Record<string, unknown>) =>
     (await api.get(path, { params, signal: controller.signal, timeout: 15000 })).data;
@@ -199,7 +202,7 @@ export async function startClientDemo() {
         chapter: 'Welcome',
         title: 'Client Demo: the business story',
         body:
-          'A full walkthrough of around 30 minutes for ' +
+          'A quick walkthrough of around 10 minutes for ' +
           esc(config.company?.name || config.appName) +
           '. Use the chapter menu for a shorter presentation or to jump straight to a question. <b>Only existing screens and saved records are opened; no business data is created, posted, paid or changed.</b><br><br>' +
           (status.active
@@ -664,9 +667,65 @@ export async function startClientDemo() {
       title: 'Agree the next step with management',
       body: 'Confirm branches/users, approval rules, serial and service requirements, migration scope and who signs off the balances. Tally migration and full accounting/access validation remain go-live work. Actual service-job costing, mandatory serial scanning and external messaging are separate extensions.<br><br><b>Finish or Exit restores your original tabs. No business records have been created or changed by this walkthrough.</b>',
     });
+    const brief: Record<string, string> = {
+  "ERP: one connected workspace": "Sales, purchases, stock, accounts and service share linked records. Start here to review the business.",
+  "What should the owner check?": "Check sales, purchases, money due, stock and pending work. Use the same reporting period when comparing figures.",
+  "Navigate with the left tree": "Choose a module and open its screen. Related screens stay open as tabs.",
+  "Identify the machine": "A product code identifies the machine model; a serial number identifies one physical unit. Review the stock number, brand and product photo.",
+  "Cost and selling price": "Compare the purchase cost and selling price. Actual sales margin uses the cost recorded when the transaction is posted.",
+  "Available stock and warehouse location": "See stock by warehouse, reserved quantity and availability. Reserved stock is committed to an order.",
+  "Order from the supplier": "The purchase order records what you are buying, from whom, and at what price.",
+  "Confirm what arrived": "The goods receipt records the quantity that arrived. Posting it updates warehouse stock.",
+  "Understand the supplier bill": "The supplier invoice records the amount payable and VAT. An allocated payment reduces the outstanding balance.",
+  "Begin with the customer offer": "The quotation lists the machines, prices and terms offered to the customer.",
+  "Use a proforma when the deal needs one": "A proforma is an optional preliminary bill. Confirm it to create the linked sales order.",
+  "Confirm the sales order": "The accepted deal becomes an order. Approval reserves stock for fulfilment.",
+  "Pick and pack the machines": "Picking collects the ordered stock; packing prepares it for dispatch.",
+  "Record the delivery": "Posting the delivery records what left the warehouse and links it to the sale.",
+  "Read the customer invoice": "The invoice records the customer bill, VAT and accounting entries. PDF / Print opens the printable copy.",
+  "Link the customer payment": "Allocate the customer receipt to the invoice. The outstanding amount reduces when payment is recorded.",
+  "Find the exact machine": "Use the serial register to trace a machine’s customer, delivery, warranty and AMC.",
+  "Show the maintenance commitment": "AMC holds the contract dates, fee and planned service visits for the customer’s equipment.",
+  "Keep follow-up visible": "Review payment dues, service visits and AMC renewals in the Reminder Centre.",
+  "See what is still waiting": "Track remaining quantities through each stage. An order of 10 with 4 processed has 6 pending.",
+  "Set salesperson targets and incentive slabs": "Set monthly targets and the incentive slabs used to calculate salesperson performance.",
+  "Compare the branches": "Compare branch sales, gross profit and margins using the same period. Stock value is a current snapshot.",
+  "Understand the profit measure": "Gross profit is sales less recorded cost of goods sold, before salaries, rent and other overheads.",
+  "Follow a customer or supplier ledger": "Review opening balances, transactions and closing balances for a customer or supplier.",
+  "Who changed this record?": "Edit History shows the employee, time, previous value and new value on supported records.",
+  "Who is waiting for approval?": "Pending Approvals lists documents waiting for authorised review.",
+  "Give staff the right tools": "HR brings employee records, attendance, leave and payroll screens together.",
+  "Configure the workspace": "Company & Modules controls branding and optional features. Disabled features retain their saved records.",
+  "Separate business units": "A BU separates divisions and their transactions. Admin can view one or all; staff use their assigned BU. Stock remains shared.",
+  "Review the current business-unit view": "Choose a BU for new documents. Your choice is remembered; conversions retain their source document’s BU.",
+  "Understand the e-invoicing workspace": "Review invoice XML, queue status and logs. Sandbox is a demonstration; live submission needs the provider adapter.",
+  "Ask a business question": "Ask a supported question such as “Who owes us money?” The assistant reads permitted data; each question stands independently.",
+  "Client Demo: the business story": "A quick tour of the connected machinery ERP. Scroll, open tabs or minimize this guide at any time. The presentation stays read-only.",
+  "Agree the next step with management": "Confirm branches, users, approvals, migration and opening balances before go-live. Finish restores your original tabs."
+};
+    const flows: Record<string, string> = {
+  "Welcome": "Overview → Purchase → Sale → Service → Management",
+  "Business overview": "Dashboard → Review figures → Follow pending work",
+  "Workspace navigation": "Module → Screen → Workspace tab",
+  "Products & purchasing": "Product → Purchase order → Goods receipt → Supplier invoice → Payment",
+  "Customer sale": "Quotation → Optional proforma → Order → Pick / pack → Delivery → Invoice → Receipt",
+  "Machine & AMC": "Serial record → Customer → AMC → Service → Renewal",
+  "Pending work & sales targets": "Pending quantities → Follow-up → Targets → Performance",
+  "Management control": "Branch results → Profit → Ledger → Edit history → Approvals",
+  "Staff & setup": "Employees → Permissions → Company settings",
+  "Business units & e-invoicing": "BU → Transactions → Reports / E-invoice queue",
+  "Finish": "Confirm requirements → Migrate → Validate → Go live"
+};
+    // Keep the key business stages; each chapter remains reachable from the menu.
+    const shortScenes = scenes.filter(scene => Object.hasOwn(brief, scene.title));
+    scenes.splice(0, scenes.length, ...shortScenes);
+    for (const scene of scenes) {
+      scene.body = brief[scene.title] + '<p class="ss-demo-flow"><b>Flow</b> ' + esc(flows[scene.chapter] ?? '') + '</p>';
+    }
     const steps: DriveStep[] = scenes.map((scene) => ({
       element: scene.screen || scene.focus ? () => targetFor(scene) ?? (undefined as unknown as Element) : undefined,
-      ...(scene.focus === 'assistant' ? { disableActiveInteraction: false } : {}),
+      disableActiveInteraction: false,
+      scrollIntoView: false,
       popover: { title: esc(scene.title), description: scene.body, side: 'left', align: 'center' },
     }));
     const screenTarget = (scene: Scene) => (scene.screen ? target('screen-' + scene.screen) : undefined);
@@ -731,6 +790,7 @@ export async function startClientDemo() {
     tour.destroy();
     replacing = false;
     tour = makeTour(steps, 'Client Demo', {
+      ...interaction,
       popoverClass: 'ss-tour ss-client-demo',
       allowedElements: ['[data-tour="assistant"]', '[aria-label="ERP assistant"]'],
       onNextClick: () => void go((tour?.getActiveIndex() ?? 0) + 1),
@@ -804,7 +864,7 @@ export async function startClientDemo() {
         },
       ],
       'Client Demo',
-      { onDestroyed: destroy },
+      { ...interaction, popoverClass: 'ss-tour ss-client-demo', onDestroyed: destroy },
     );
   }
 }
